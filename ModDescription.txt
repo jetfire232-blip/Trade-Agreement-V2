@@ -1,0 +1,218 @@
+Trade Agreement V2 is a Commerce-focused economic and diplomacy mod that adds trade agreements, investments, taxation, ideology, stock markets, flagship companies, ETFs, dividends, and enhanced AI behavior.
+
+TRADE AGREEMENTS
+
+Players may propose bilateral trade agreements with other human or AI nations.
+
+Active trade agreements provide both nations with additional Commerce income each turn. Trade benefits are based on each nation's current Commerce income and the host-configured trade settings.
+
+Players can view active agreements, find potential partners, and review recent diplomacy activity from the mod menu.
+
+
+INVESTMENTS
+
+Players and AI nations may create and invest in economic projects.
+
+Projects have:
+- Funding goals
+- Investment limits
+- Development times
+- Risk levels
+- Potential returns
+
+Successful projects return invested principal plus profit.
+
+Failed projects return the configured recovery amount.
+
+Projects that fail to reach their funding goal before the deadline refund committed principal.
+
+
+STOCK MARKET
+
+Eligible nations may establish a flagship company.
+
+Each company has:
+- A stock price
+- Total shares
+- Publicly available shares
+- Market capitalization
+- Company strategy
+- Shareholders
+- Price history
+
+Players and AI nations may buy and sell shares.
+
+Company prices react to market activity and economic conditions.
+
+
+COMPANY STRATEGIES
+
+Flagship companies may follow one of several strategies:
+
+Growth
+Focuses more heavily on expansion and provides lower dividend payouts.
+
+Balanced
+Balances company growth and shareholder returns.
+
+Dividend
+Provides larger dividend payouts to shareholders.
+
+
+DIVIDENDS
+
+Companies may distribute dividends to shareholders each turn.
+
+Dividend payments are calculated per share.
+
+Fractional dividend amounts are carried forward until they accumulate into whole Commerce gold.
+
+Players can track total dividends received through their portfolio.
+
+
+SHARE ISSUANCE
+
+Flagship company owners may issue additional public shares.
+
+Available issuance options are:
+- 10 shares
+- 25 shares
+- 50 shares
+
+Issuing additional shares increases the company's total share count and places new shares on the public market.
+
+Existing shareholders are diluted because their existing shares represent a smaller percentage of the company.
+
+Share issuance has a 5-turn cooldown.
+
+
+STOCK SPLITS
+
+Companies with very high stock prices may perform a 2-for-1 stock split.
+
+During a split:
+- Stock price is approximately halved
+- Total shares double
+- Existing shareholder share counts double
+
+The economic value of each shareholder's position remains approximately the same.
+
+
+ETF
+
+The market includes an ETF representing leading companies.
+
+The ETF periodically rebalances based on market performance.
+
+Players may:
+- Buy ETF shares
+- Sell ETF shares
+- Receive ETF dividends
+- View ETF price history and portfolio value
+
+
+TAXATION
+
+Each nation may choose a tax policy.
+
+Available policies include:
+
+Low Tax
+Encourages markets and investment but produces less direct Commerce.
+
+Standard Tax
+Provides balanced economic effects.
+
+High Tax
+Provides more direct Commerce but creates larger penalties to market and investment activity.
+
+
+IDEOLOGY
+
+Each nation may select an economic ideology.
+
+Available ideologies include:
+
+- Free Market
+- Capitalist
+- Social Democratic
+- State Capitalist
+- Socialist
+
+Ideology affects Commerce, market performance, investment behavior, company confidence, and AI economic decisions.
+
+
+DIPLOMACY
+
+The Diplomacy section allows players to:
+
+- Search for other nations
+- View player economic information
+- View ideology and tax policy
+- Review diplomatic relationships
+- View NAP and alliance status
+- View flagship company information
+- Review recent diplomacy history
+
+
+SMART AI
+
+AI nations use enhanced economic and military decision-making.
+
+AI nations may:
+- Buy and sell stocks
+- Invest in projects
+- Build cities
+- Maintain strategic gold reserves
+- Adjust spending based on economic conditions
+- Evaluate territory defense
+- Avoid unnecessary troop stacking on peaceful borders
+- Save Commerce for future wars
+- Reinforce active war fronts more aggressively
+- Adjust decisions based on AI economic profiles and ideology
+
+During peace, AI nations generally maintain moderate border defenses while preserving part of their Commerce.
+
+When war begins, more of the accumulated reserve becomes available for military spending.
+
+
+MOD MENU
+
+Open the mod menu from:
+
+Game > Mod > Trade Agreement V2
+
+The menu includes:
+
+- Overview
+- Diplomacy
+- Trade Agreements
+- Investments
+- Markets
+- Taxation
+- Global Economy
+- How It Works
+- Customize Tabs
+
+
+HOST CONFIGURATION
+
+The host may configure many economic and gameplay settings before the game begins.
+
+Settings can affect trade, investments, taxation, market behavior, AI behavior, and other economic systems.
+
+
+GENERAL NOTES
+
+This mod is designed around Commerce games.
+
+Economic systems continue to develop over multiple turns, so market prices, company ownership, investments, dividends, taxation, diplomacy, and AI strategy may change significantly throughout a game.
+
+For best results, players should regularly review the mod menu and monitor their nation's economy, investments, diplomatic relationships, and market positions.
+
+
+FUTURE DEVELOPMENT
+
+United Nations features are planned for a future V3 release.
+
+Some temporary UN-related configuration may still exist in the current codebase, but the UN system is not active or supported in Trade Agreement V2.
