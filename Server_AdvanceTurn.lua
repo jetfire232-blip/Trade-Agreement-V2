@@ -14447,38 +14447,42 @@ end
     end
 
 
-    local attackerNation =
-        EnsureEconomyNation(
-            game,
-            data,
-            attackerID
-        );
+local economy =
+    data.globalEconomy;
 
+local nations =
+    economy
+    and economy.nations
+    or {};
 
-    local defenderNation =
-        EnsureEconomyNation(
-            game,
-            data,
-            defenderID
-        );
+local attackerNation =
+    nations[
+        attackerID
+    ];
 
+local defenderNation =
+    nations[
+        defenderID
+    ];
 
     -- Nations that have not completed National Setup
     -- cannot participate in mod-controlled warfare.
 
-    if attackerNation.setupComplete
+if attackerNation == nil
+    or defenderNation == nil
+    or attackerNation.setupComplete
         ~= true
-        or defenderNation.setupComplete
-        ~= true then
+    or defenderNation.setupComplete
+        ~= true
+then
 
+    skipThisOrder(
+        WL.ModOrderControl.Skip
+    );
 
-        skipThisOrder(
-            WL.ModOrderControl.Skip
-        );
+    return;
 
-
-        return;
-    end
+end
 
 
     -- =====================================================
