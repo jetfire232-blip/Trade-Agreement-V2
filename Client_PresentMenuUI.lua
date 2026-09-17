@@ -2598,9 +2598,6 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.taxation =
                 taxationBox.GetIsChecked();
 
-            PlayerTabVisibility.unitedNations =
-                unBox.GetIsChecked();
-
             PlayerTabVisibility.globalEconomy =
                 globalBox.GetIsChecked();
 
