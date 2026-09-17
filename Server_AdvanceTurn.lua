@@ -14024,33 +14024,46 @@ AIConsiderCityConstruction(
     addNewOrder
 );
 
-ProcessAIMarketSelling(
-    game,
-    data,
-    resourceChanges,
-    playerID
-);
+local aiEconomyPhase =
+    (
+        data.tradeTurn
+        + playerID
+    )
+    % 2;
 
-ProcessAIMarketBuying(
-    game,
-    data,
-    resourceChanges,
-    playerID
-);
+if aiEconomyPhase == 0 then
 
-AIConsiderProjectCreation(
-    game,
-    data,
-    playerID,
-    resourceChanges
-);
+    ProcessAIMarketSelling(
+        game,
+        data,
+        resourceChanges,
+        playerID
+    );
 
-AIConsiderInvestment(
-    game,
-    data,
-    playerID,
-    resourceChanges
-);
+    ProcessAIMarketBuying(
+        game,
+        data,
+        resourceChanges,
+        playerID
+    );
+
+else
+
+    AIConsiderProjectCreation(
+        game,
+        data,
+        playerID,
+        resourceChanges
+    );
+
+    AIConsiderInvestment(
+        game,
+        data,
+        playerID,
+        resourceChanges
+    );
+
+end
 
 end
 
@@ -14174,151 +14187,8 @@ end
 -- =====================================================
 
 if order.proxyType == "GameOrderDeploy" then
-
-    local deployPlayerID =
-        order.PlayerID;
-
-    local deployPlayer =
-        game.Game.Players[
-            deployPlayerID
-        ];
-
-    if deployPlayer ~= nil
-        and deployPlayer.IsAI == true then
-
-        local deployTerritoryID =
-            order.DeployOn;
-
-local deployArmies =
-    order.NumArmies
-    or 0;
-
-local data =
-    GetEconomicData();
-
-if data == nil then
     return;
 end
-
-local standing =
-    game.ServerGame
-        .LatestTurnStanding;
-
-if standing == nil
-    or standing.Territories == nil then
-
-    return;
-end
-
-local territoryStanding =
-    standing.Territories[
-        deployTerritoryID
-    ];
-
-if territoryStanding == nil then
-    return;
-end
-
-local defenseValue =
-    GetAITerritoryDefenseValue(
-        game,
-        data,
-        deployPlayerID,
-        deployTerritoryID
-    );
-
-local bestDefenseTerritoryID,
-      bestDefenseValue =
-    GetAIBestDefenseTerritory(
-        game,
-        data,
-        deployPlayerID
-    );
-
-local currentArmies =
-    0;
-
-if territoryStanding.NumArmies ~= nil then
-
-    currentArmies =
-        territoryStanding.NumArmies.NumArmies
-        or 0;
-
-end
-
-local projectedArmies =
-    currentArmies
-    + deployArmies;
-
-local hasForeignBorder,
-    hasWarBorder =
-    GetAIBorderStatus(
-        game,
-        data,
-        deployPlayerID,
-        deployTerritoryID
-    );
-
-if hasForeignBorder
-    and not hasWarBorder
-then
-
-    local peacefulBorderCap =
-        15;
-
-    if defenseValue >= 20 then
-        peacefulBorderCap =
-            20;
-    end
-
-    if projectedArmies >
-        peacefulBorderCap
-    then
-
-        skipThisOrder(
-            WL.ModOrderControl.Skip
-        );
-
-        return;
-
-    end
-
-end
-
-if bestDefenseTerritoryID ~= nil
-    and bestDefenseTerritoryID
-        ~= deployTerritoryID
-    and bestDefenseValue
-        >= defenseValue + 10
-    and deployArmies >= 8
-then
-
-    skipThisOrder(
-        WL.ModOrderControl.Skip
-    );
-
-    return;
-
-end
-
-if defenseValue <= 2
-    and projectedArmies >= 15
-    and deployArmies >= 8 then
-
-    skipThisOrder(
-        WL.ModOrderControl.Skip
-    );
-
-    return;
-
-end
-
-    end
-
-    return;
-
-end
-
 
 -- =====================================================
 -- ATTACK / TRANSFER ORDERS
@@ -14530,44 +14400,6 @@ if sourceArmies >= 20 then
 
 end
 
--- Strategic territory value:
--- bonuses + nearby wartime enemy strength.
-local strategicDefense =
-    GetAITerritoryDefenseValue(
-        game,
-        data,
-        attackerID,
-        order.From
-    );
-
--- Do not let the strategic requirement consume
--- more than 70% of the current stack.
-local strategicCap =
-    math.floor(
-        sourceArmies
-        * 0.70
-    );
-
-strategicDefense =
-    math.min(
-        strategicDefense,
-        strategicCap
-    );
-
-minimumDefense =
-    math.max(
-        minimumDefense,
-        strategicDefense
-    );
-
-local attackValue =
-    GetAITerritoryAttackValue(
-        game,
-        data,
-        attackerID,
-        order.To
-    );
-
 local defenderArmies =
     0;
 
@@ -14582,29 +14414,13 @@ end
 
 -- Avoid low-value attacks where the AI is
 -- badly outmatched by the defender.
-if attackValue <= 8
-    and defenderArmies > 0
+
+
+if defenderArmies > 0
     and attackingArmies
         < math.floor(
             defenderArmies
-            * 1.20
-        )
-then
-
-    skipThisOrder(
-        WL.ModOrderControl.Skip
-    );
-
-    return;
-
-end
-
-if strategicDefense >= 12
-    and attackValue <= 5
-    and remainingArmies
-        < math.floor(
-            sourceArmies
-            * 0.50
+            * 1.15
         )
 then
 
