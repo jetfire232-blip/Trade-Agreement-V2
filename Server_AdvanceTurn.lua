@@ -14187,7 +14187,136 @@ end
 -- =====================================================
 
 if order.proxyType == "GameOrderDeploy" then
+
+    local deployPlayerID =
+        order.PlayerID;
+
+    local deployPlayer =
+        game.Game.Players[
+            deployPlayerID
+        ];
+
+    if deployPlayer == nil
+        or deployPlayer.IsAI ~= true
+    then
+        return;
+    end
+
+    local deployTerritoryID =
+        order.DeployOn;
+
+    local deployArmies =
+        order.NumArmies
+        or 0;
+
+    local standing =
+        game.ServerGame
+            .LatestTurnStanding;
+
+    if standing == nil
+        or standing.Territories == nil
+    then
+        return;
+    end
+
+    local territoryStanding =
+        standing.Territories[
+            deployTerritoryID
+        ];
+
+    if territoryStanding == nil then
+        return;
+    end
+
+    local currentArmies =
+        0;
+
+    if territoryStanding.NumArmies ~= nil then
+
+        currentArmies =
+            territoryStanding.NumArmies.NumArmies
+            or 0;
+
+    end
+
+    local projectedArmies =
+        currentArmies
+        + deployArmies;
+
+    local territoryDetails =
+        game.Map.Territories[
+            deployTerritoryID
+        ];
+
+    if territoryDetails == nil then
+        return;
+    end
+
+    local data =
+        GetEconomicData();
+
+    if data == nil then
+        return;
+    end
+
+    local hasPeacefulForeignBorder =
+        false;
+
+    for connectedTerritoryID, _
+        in pairs(
+            territoryDetails.ConnectedTo
+            or {}
+        )
+    do
+
+        local connectedStanding =
+            standing.Territories[
+                connectedTerritoryID
+            ];
+
+        if connectedStanding ~= nil then
+
+            local otherPlayerID =
+                connectedStanding.OwnerPlayerID;
+
+            if otherPlayerID ~= nil
+                and otherPlayerID ~= deployPlayerID
+                and otherPlayerID ~= WL.PlayerID.Neutral
+            then
+
+                if not IsDiplomacyWar(
+                    data,
+                    deployPlayerID,
+                    otherPlayerID
+                ) then
+
+                    hasPeacefulForeignBorder =
+                        true;
+
+                    break;
+
+                end
+
+            end
+
+        end
+
+    end
+
+    if hasPeacefulForeignBorder
+        and projectedArmies > 20
+    then
+
+        skipThisOrder(
+            WL.ModOrderControl.Skip
+        );
+
+        return;
+
+    end
+
     return;
+
 end
 
 -- =====================================================
