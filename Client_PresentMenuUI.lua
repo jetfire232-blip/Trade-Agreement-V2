@@ -170,7 +170,6 @@ PlayerTabVisibility = PlayerTabVisibility or {
     investments = true,
     markets = true,
     taxation = true,
-    unitedNations = true,
     globalEconomy = true,
     howItWorks = true
 };
@@ -179,15 +178,58 @@ ActiveMainTab = ActiveMainTab or "overview";
 MainTabsArea = nil;
 
 
-function MainTabText(key, label, colorMarker)
-
-    local selected = "";
+function MainTabText(key, label)
 
     if ActiveMainTab == key then
-        selected = "> ";
+        return "▶ " .. label;
     end
 
-    return colorMarker .. " " .. selected .. label;
+    return label;
+end
+
+function GetPlayerUIColor(
+    game,
+    playerID,
+    fallback
+)
+
+    local defaultColor =
+        fallback
+        or "#FFFFFF";
+
+    if game == nil
+        or game.Game == nil
+        or game.Game.Players == nil
+    then
+        return defaultColor;
+    end
+
+    local player =
+        game.Game.Players[
+            playerID
+        ];
+
+    if player == nil
+        or player.Color == nil
+        or player.Color.HtmlColor == nil
+    then
+        return defaultColor;
+    end
+
+    local color =
+        tostring(
+            player.Color.HtmlColor
+        );
+
+    if color == "" then
+        return defaultColor;
+    end
+
+    if string.sub(color, 1, 1) ~= "#" then
+        color = "#" .. color;
+    end
+
+    return color;
 end
 
 
@@ -249,6 +291,9 @@ function ShowDiplomacyMenu(
 local playerSearchResults =
     nil;
 
+local playerSearchResultsHost =
+    nil;
+
     local selectedDiplomacyPlayerID =
     nil;
 
@@ -259,6 +304,9 @@ local selectedDiplomacyPlayerName =
     nil;
 
     local selectedDiplomacyOverviewGroup =
+    nil;
+
+    local selectedDiplomacyOverviewHost =
     nil;
 
     local relationships =
@@ -333,15 +381,17 @@ end
 
 local function RefreshSelectedDiplomacyOverview()
 
-    if selectedDiplomacyOverviewGroup == nil then
+    if selectedDiplomacyOverviewHost == nil then
 
         return;
 
     end
 
-if not UI.IsDestroyed(
-    selectedDiplomacyOverviewGroup
-) then
+if selectedDiplomacyOverviewGroup ~= nil
+    and not UI.IsDestroyed(
+        selectedDiplomacyOverviewGroup
+    )
+then
 
     UI.Destroy(
         selectedDiplomacyOverviewGroup
@@ -351,7 +401,7 @@ end
 
 selectedDiplomacyOverviewGroup =
     UI.CreateVerticalLayoutGroup(
-        area
+        selectedDiplomacyOverviewHost
     );
 
     if selectedDiplomacyPlayerID == nil then
@@ -453,113 +503,100 @@ selectedDiplomacyOverviewGroup =
         or {};
 
 
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "\nPLAYER OVERVIEW"
+    local targetColor =
+        GetPlayerUIColor(
+            game,
+            targetID,
+            "#FFFFFF"
         );
 
+    local overviewTitle =
+        UI.CreateLabel(
+            selectedDiplomacyOverviewGroup
+        )
+            .SetText(
+                "PLAYER OVERVIEW - " ..
+                tostring(targetName)
+            );
 
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
+    overviewTitle.SetColor(
+        targetColor
+    );
+
+    local function AddOverviewPair(
+        leftText,
+        rightText
     )
-        .SetText(
-            "Player: " ..
-            tostring(
-                targetName
+
+        local row =
+            UI.CreateHorizontalLayoutGroup(
+                selectedDiplomacyOverviewGroup
+            );
+
+        UI.CreateLabel(row)
+            .SetText(leftText)
+            .SetFlexibleWidth(1);
+
+        UI.CreateLabel(row)
+            .SetText(rightText)
+            .SetFlexibleWidth(1);
+
+    end
+
+    AddOverviewPair(
+        "Relationship: " ..
+        string.upper(
+            tostring(status)
+        ),
+        "Commerce/Turn: " ..
+        tostring(
+            GetPlayerIncome(
+                game,
+                targetID
             )
-        );
+        )
+    );
 
+    AddOverviewPair(
+        "Ideology: " ..
+        tostring(
+            targetNation.ideology
+            or "Unknown"
+        ),
+        "Tax Policy: " ..
+        tostring(
+            targetNation.taxPolicy
+            or "Unknown"
+        )
+    );
 
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Relationship: " ..
-            string.upper(
-                tostring(
-                    status
-                )
-            )
-        );
+    AddOverviewPair(
+        "Economic Strategy: " ..
+        tostring(
+            targetNation.economicStrategy
+            or "Unknown"
+        ),
+        "Company Strategy: " ..
+        tostring(
+            targetNation.companyStrategy
+            or "Unknown"
+        )
+    );
 
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Ideology: " ..
-            tostring(
-                targetNation.ideology
-                or "Unknown"
-            )
-        );
-
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Tax Policy: " ..
-            tostring(
-                targetNation.taxPolicy
-                or "Unknown"
-            )
-        );
-
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Economic Strategy: " ..
-            tostring(
-                targetNation.economicStrategy
-                or "Unknown"
-            )
-        );
-
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Commerce/Turn: " ..
-            tostring(
-                GetPlayerIncome(
-                    game,
-                    targetID
-                )
-            )
-        );
-
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "NAP: " ..
-            (
-                hasNAP
-                and "ACTIVE"
-                or "NONE"
-            )
-        );
-
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Alliance: " ..
-            (
-                isAllied
-                and "ACTIVE"
-                or "NONE"
-            )
-        );
-
+    AddOverviewPair(
+        "NAP: " ..
+        (
+            hasNAP
+            and "ACTIVE"
+            or "NONE"
+        ),
+        "Alliance: " ..
+        (
+            isAllied
+            and "ACTIVE"
+            or "NONE"
+        )
+    );
 
     UI.CreateLabel(
         selectedDiplomacyOverviewGroup
@@ -571,19 +608,6 @@ selectedDiplomacyOverviewGroup =
                 or "None"
             )
         );
-
-
-    UI.CreateLabel(
-        selectedDiplomacyOverviewGroup
-    )
-        .SetText(
-            "Company Strategy: " ..
-            tostring(
-                targetNation.companyStrategy
-                or "Unknown"
-            )
-        );
-
 
 UI.CreateLabel(
     selectedDiplomacyOverviewGroup
@@ -666,27 +690,28 @@ end
 
 local function RefreshPlayerSearchResults()
 
-    if playerSearchResults == nil
-        or playerSearchInput == nil then
-
+    if playerSearchResultsHost == nil
+        or playerSearchInput == nil
+    then
         return;
     end
 
-    if not UI.IsDestroyed(
-    playerSearchResults
-) then
+    if playerSearchResults ~= nil
+        and not UI.IsDestroyed(
+            playerSearchResults
+        )
+    then
 
-    UI.Destroy(
-        playerSearchResults
-    );
+        UI.Destroy(
+            playerSearchResults
+        );
 
-end
+    end
 
-playerSearchResults =
-    UI.CreateVerticalLayoutGroup(
-        area
-    );
-
+    playerSearchResults =
+        UI.CreateVerticalLayoutGroup(
+            playerSearchResultsHost
+        );
 
     local searchText =
         string.lower(
@@ -694,14 +719,19 @@ playerSearchResults =
             or ""
         );
 
+    local matches =
+        {};
 
     for playerID, player
         in pairs(
             game.Game.Players
             or {}
-        ) do
+        )
+    do
 
-        if playerID ~= ourID then
+        if playerID ~= ourID
+            and player.State == WL.GamePlayerState.Playing
+        then
 
             local playerName =
                 player.DisplayName(
@@ -715,45 +745,135 @@ playerSearchResults =
                     or ""
                 );
 
-            if string.find(
-                lowerName,
-                searchText,
-                1,
-                true
-            ) ~= nil then
+            if searchText == ""
+                or string.find(
+                    lowerName,
+                    searchText,
+                    1,
+                    true
+                ) ~= nil
+            then
 
-                UI.CreateButton(
-                    playerSearchResults
-                )
-                    .SetText(
-                        playerName
-                    )
-.SetOnClick(function()
-
-    selectedDiplomacyPlayerID =
-        playerID;
-
-    selectedDiplomacyPlayerName =
-        playerName;
-
-    if selectedDiplomacyPlayerLabel ~= nil then
-
-    selectedDiplomacyPlayerLabel.SetText(
-        "Selected Player: " ..
-        selectedDiplomacyPlayerName
-    );
-
-end
-
-RefreshSelectedDiplomacyOverview();
-
-    RefreshPlayerSearchResults();
-
-end);
+                table.insert(
+                    matches,
+                    {
+                        id = playerID,
+                        name = playerName
+                    }
+                );
 
             end
 
         end
+
+    end
+
+    table.sort(
+        matches,
+        function(a, b)
+
+            return string.lower(
+                tostring(a.name)
+            ) < string.lower(
+                tostring(b.name)
+            );
+
+        end
+    );
+
+    if #matches == 0 then
+
+        UI.CreateLabel(
+            playerSearchResults
+        )
+            .SetText(
+                "No players match your search."
+            );
+
+        return;
+    end
+
+    local row = nil;
+
+    for index, entry
+        in ipairs(matches)
+    do
+
+        if (index - 1) % 3 == 0 then
+
+            row =
+                UI.CreateHorizontalLayoutGroup(
+                    playerSearchResults
+                );
+
+        end
+
+        local targetID =
+            entry.id;
+
+        local targetName =
+            entry.name;
+
+        local playerButton =
+            UI.CreateButton(row)
+                .SetText(
+                    tostring(targetName)
+                )
+                .SetFlexibleWidth(1)
+                .SetPreferredHeight(36)
+                .SetTextColor(
+                    GetPlayerUIColor(
+                        game,
+                        targetID,
+                        "#FFFFFF"
+                    )
+                );
+
+        if selectedDiplomacyPlayerID == targetID then
+
+            playerButton.SetColor(
+                "#606060"
+            );
+
+        else
+
+            playerButton.SetColor(
+                "#BABABC"
+            );
+
+        end
+
+        playerButton.SetOnClick(function()
+
+            selectedDiplomacyPlayerID =
+                targetID;
+
+            selectedDiplomacyPlayerName =
+                targetName;
+
+            if selectedDiplomacyPlayerLabel ~= nil then
+
+                selectedDiplomacyPlayerLabel.SetText(
+                    "Selected Player: " ..
+                    tostring(
+                        selectedDiplomacyPlayerName
+                    )
+                );
+
+                selectedDiplomacyPlayerLabel.SetColor(
+                    GetPlayerUIColor(
+                        game,
+                        targetID,
+                        "#FFFFFF"
+                    )
+                );
+
+            end
+
+            RefreshSelectedDiplomacyOverview();
+            RefreshPlayerSearchResults();
+
+        end);
 
     end
 
@@ -764,61 +884,52 @@ end
             "DIPLOMACY"
         );
 
-UI.CreateLabel(area)
-    .SetText(
-        "SEARCH PLAYER"
-    );
+    UI.CreateLabel(area)
+        .SetText(
+            "Search or tap a player to open their overview."
+        );
 
-playerSearchInput =
-    UI.CreateTextInputField(
-        area
-    )
-        .SetOnValueChanged(function()
+    playerSearchInput =
+        UI.CreateTextInputField(
+            area
+        )
+            .SetPlaceholderText(
+                "Search players..."
+            )
+            .SetOnValueChanged(function()
 
-            RefreshPlayerSearchResults();
+                RefreshPlayerSearchResults();
 
-        end);
+            end);
 
-playerSearchResults =
-    UI.CreateVerticalLayoutGroup(
-        area
-    );
+    playerSearchResultsHost =
+        UI.CreateVerticalLayoutGroup(
+            area
+        );
 
-    RefreshPlayerSearchResults();
+    playerSearchResults =
+        UI.CreateVerticalLayoutGroup(
+            playerSearchResultsHost
+        );
 
     selectedDiplomacyPlayerLabel =
-    UI.CreateLabel(area);
-
-selectedDiplomacyPlayerLabel.SetText(
-    "Selected Player: None"
-);
-
-selectedDiplomacyOverviewGroup =
-    UI.CreateVerticalLayoutGroup(
-        area
-    );
-
-UI.CreateButton(area)
-    .SetText(
-        "OVERVIEW"
-    )
-
-
-    .SetOnClick(function()
-
-        if selectedDiplomacyPlayerID == nil then
-
-            UI.Alert(
-                "Please select a player first."
+        UI.CreateLabel(area)
+            .SetText(
+                "Selected Player: None"
             );
 
-            return;
-        end
+    selectedDiplomacyOverviewHost =
+        UI.CreateVerticalLayoutGroup(
+            area
+        );
 
-        RefreshSelectedDiplomacyOverview();
+    selectedDiplomacyOverviewGroup =
+        UI.CreateVerticalLayoutGroup(
+            selectedDiplomacyOverviewHost
+        );
 
-
-    end);
+    RefreshPlayerSearchResults();
+    RefreshSelectedDiplomacyOverview();
 
     UI.CreateLabel(area)
         .SetText(
@@ -1009,10 +1120,19 @@ end
             end
 
 
-            UI.CreateLabel(row)
-                .SetText(
-                    statusText
-                );
+            local relationLabel =
+                UI.CreateLabel(row)
+                    .SetText(
+                        statusText
+                    );
+
+            relationLabel.SetColor(
+                GetPlayerUIColor(
+                    game,
+                    playerID,
+                    "#FFFFFF"
+                )
+            );
 
 
             -- =================================================
@@ -2405,6 +2525,159 @@ UI.CreateButton(area)
 end
 
 
+
+-- =========================================================
+-- SHARED TAX / IDEOLOGY PREVIEW
+-- =========================================================
+
+function GetPolicyPreviewText(
+    game,
+    taxPolicy,
+    ideology
+)
+
+    local taxCommerce = 0;
+    local taxMarket = 0;
+    local taxInvestment = 0;
+    local taxConfidence = 0;
+
+    if taxPolicy == "Low" then
+
+        taxCommerce = -10;
+        taxMarket = 10;
+        taxInvestment = 10;
+        taxConfidence = 5;
+
+    elseif taxPolicy == "High" then
+
+        taxCommerce = 10;
+        taxMarket = -10;
+        taxInvestment = -10;
+        taxConfidence = -5;
+
+    end
+
+    local ideologyCommerce = 0;
+    local ideologyMarket = 0;
+    local ideologyInvestment = 0;
+    local ideologyConfidence = 0;
+
+    if ideology == "Free Market" then
+
+        ideologyCommerce = -3;
+        ideologyMarket = 8;
+        ideologyInvestment = 6;
+        ideologyConfidence = 2;
+
+    elseif ideology == "Capitalist" then
+
+        ideologyCommerce = -2;
+        ideologyMarket = 6;
+        ideologyInvestment = 5;
+        ideologyConfidence = 3;
+
+    elseif ideology == "Social Democratic" then
+
+        ideologyCommerce = 2;
+        ideologyMarket = 2;
+        ideologyInvestment = 3;
+        ideologyConfidence = 2;
+
+    elseif ideology == "State Capitalist" then
+
+        ideologyCommerce = 4;
+        ideologyMarket = 1;
+        ideologyInvestment = 5;
+        ideologyConfidence = 4;
+
+    elseif ideology == "Socialist" then
+
+        ideologyCommerce = 5;
+        ideologyMarket = -5;
+        ideologyInvestment = 1;
+        ideologyConfidence = 1;
+
+    end
+
+    local totalCommerce =
+        taxCommerce
+        + ideologyCommerce;
+
+    local totalMarket =
+        taxMarket
+        + ideologyMarket;
+
+    local totalInvestment =
+        taxInvestment
+        + ideologyInvestment;
+
+    local totalConfidence =
+        taxConfidence
+        + ideologyConfidence;
+
+    local currentCommerce =
+        0;
+
+    if game ~= nil
+        and game.Us ~= nil
+    then
+
+        currentCommerce =
+            GetPlayerIncome(
+                game,
+                game.Us.ID
+            )
+            or 0;
+
+    end
+
+    local projectedCommerce =
+        math.floor(
+            currentCommerce
+            * (
+                1
+                + totalCommerce / 100
+            )
+            + 0.5
+        );
+
+    local function SignedNumber(
+        value,
+        suffix
+    )
+
+        if value > 0 then
+
+            return
+                "+"
+                .. tostring(value)
+                .. suffix;
+
+        end
+
+        return
+            tostring(value)
+            .. suffix;
+
+    end
+
+    return
+        "Combined Policy Impact\n" ..
+        "Commerce: " ..
+        SignedNumber(totalCommerce, "%") ..
+        " | Market: " ..
+        SignedNumber(totalMarket, "%") ..
+        " | Investment: " ..
+        SignedNumber(totalInvestment, "%") ..
+        " | Company Confidence: " ..
+        SignedNumber(totalConfidence, "") ..
+        "\nEstimated Commerce/Turn: " ..
+        tostring(currentCommerce) ..
+        " -> ~" ..
+        tostring(projectedCommerce);
+
+end
+
 function ShowTaxationMenu(
     parent,
     game
@@ -2625,7 +2898,6 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.investments = true;
             PlayerTabVisibility.markets = true;
             PlayerTabVisibility.taxation = true;
-            PlayerTabVisibility.unitedNations = true;
             PlayerTabVisibility.globalEconomy = true;
             PlayerTabVisibility.howItWorks = true;
 
@@ -2649,16 +2921,16 @@ function BuildMainTabs(
     game
 )
 
-    if MainTabsArea ~= nil then
-
-        if not UI.IsDestroyed(
+    if MainTabsArea ~= nil
+        and not UI.IsDestroyed(
             MainTabsArea
-        ) then
+        )
+    then
 
-            UI.Destroy(
-                MainTabsArea
-            );
-        end
+        UI.Destroy(
+            MainTabsArea
+        );
+
     end
 
     MainTabsArea =
@@ -2666,204 +2938,193 @@ function BuildMainTabs(
             tabsHost
         );
 
-    local row1 =
-        UI.CreateHorizontalLayoutGroup(
-            MainTabsArea
-        );
+    local tabs =
+        {};
 
-    local row2 =
-        UI.CreateHorizontalLayoutGroup(
-            MainTabsArea
-        );
-
-    local function AddTab(
-        row,
+    local function QueueTab(
         key,
         label,
-        marker,
+        buttonColor,
+        textColor,
         onClick
     )
 
-        UI.CreateButton(row)
-            .SetText(
-                MainTabText(
-                    key,
-                    label,
-                    marker
-                )
-            )
-            .SetOnClick(function()
+        table.insert(
+            tabs,
+            {
+                key = key,
+                label = label,
+                buttonColor = buttonColor,
+                textColor = textColor,
+                onClick = onClick
+            }
+        );
 
-                ActiveMainTab = key;
-
-                BuildMainTabs(
-                    tabsHost,
-                    contentHost,
-                    game
-                );
-
-                onClick();
-
-            end);
     end
 
-    AddTab(
-        row1,
+    QueueTab(
         "overview",
         "Overview",
-        "🔵",
+        "#4169E1",
+        "#FFFFFF",
         function()
-
-            ShowOverview(
-                contentHost,
-                game
-            );
-
+            ShowOverview(contentHost, game);
         end
     );
 
-    AddTab(
-        row1,
+    QueueTab(
         "diplomacy",
         "Diplomacy",
-        "🟠",
+        "#FF7D00",
+        "#FFFFFF",
         function()
-
-            ShowDiplomacyMenu(
-                contentHost,
-                game
-            );
-
+            ShowDiplomacyMenu(contentHost, game);
         end
     );
 
-    AddTab(
-        row1,
+    QueueTab(
         "trade",
         "Trade Agreements",
-        "🟢",
+        "#359029",
+        "#FFFFFF",
         function()
-
-            ShowTradeAgreementsMenu(
-                contentHost,
-                game
-            );
-
+            ShowTradeAgreementsMenu(contentHost, game);
         end
     );
 
     if PlayerTabVisibility.investments then
-
-        AddTab(
-            row1,
+        QueueTab(
             "investments",
             "Investments",
-            "🟣",
+            "#59009D",
+            "#FFFFFF",
             function()
-
-                ShowInvestments(
-                    contentHost,
-                    game
-                );
-
+                ShowInvestments(contentHost, game);
             end
         );
     end
 
     if PlayerTabVisibility.markets then
-
-        AddTab(
-            row1,
+        QueueTab(
             "markets",
             "Markets",
-            "🟡",
+            "#DAA520",
+            "#000000",
             function()
-
-                ShowMarketsMenu(
-                    contentHost,
-                    game
-                );
-
+                ShowMarketsMenu(contentHost, game);
             end
         );
     end
 
     if PlayerTabVisibility.taxation then
-
-        AddTab(
-            row2,
+        QueueTab(
             "taxation",
             "Taxation",
-            "🟦",
+            "#1274A4",
+            "#FFFFFF",
             function()
-
-                ShowTaxationMenu(
-                    contentHost,
-                    game
-                );
-
+                ShowTaxationMenu(contentHost, game);
             end
         );
     end
 
-
     if PlayerTabVisibility.globalEconomy then
-
-        AddTab(
-            row2,
+        QueueTab(
             "global",
             "Global Economy",
-            "🔴",
+            "#B03B3B",
+            "#FFFFFF",
             function()
-
                 ShowGlobalEconomy(
                     contentHost,
                     game,
                     "all"
                 );
-
             end
         );
     end
 
     if PlayerTabVisibility.howItWorks then
-
-        AddTab(
-            row2,
+        QueueTab(
             "help",
             "How It Works",
-            "⚪",
+            "#606060",
+            "#FFFFFF",
             function()
-
-                ShowHowItWorks(
-                    contentHost
-                );
-
+                ShowHowItWorks(contentHost);
             end
         );
     end
 
-    UI.CreateButton(row2)
-        .SetText(
-            "Customize Tabs"
-        )
-        .SetOnClick(function()
-
-            ActiveMainTab = "customize";
-
-            BuildMainTabs(
-                tabsHost,
-                contentHost,
-                game
-            );
-
+    QueueTab(
+        "customize",
+        "Customize Tabs",
+        "#BABABC",
+        "#000000",
+        function()
             ShowCustomizeTabs(
                 contentHost,
                 game,
                 tabsHost
             );
+        end
+    );
 
-        end);
+    local row = nil;
+
+    for index, tab
+        in ipairs(tabs)
+    do
+
+        if (index - 1) % 2 == 0 then
+
+            row =
+                UI.CreateHorizontalLayoutGroup(
+                    MainTabsArea
+                );
+
+        end
+
+        local tabButton =
+            UI.CreateButton(row)
+                .SetText(
+                    MainTabText(
+                        tab.key,
+                        tab.label
+                    )
+                )
+                .SetColor(
+                    tab.buttonColor
+                )
+                .SetTextColor(
+                    tab.textColor
+                )
+                .SetFlexibleWidth(1)
+                .SetPreferredHeight(40)
+                .SetOnClick(function()
+
+                    ActiveMainTab =
+                        tab.key;
+
+                    BuildMainTabs(
+                        tabsHost,
+                        contentHost,
+                        game
+                    );
+
+                    tab.onClick();
+
+                end);
+
+        if ActiveMainTab == tab.key then
+
+            tabButton.SetPreferredHeight(
+                44
+            );
+
+        end
+
+    end
 end
 
 
@@ -4610,62 +4871,204 @@ function ShowStockMarket(
         market.companies
         or {};
 
+    local ourNation =
+        (
+            economy.nations
+            or {}
+        )[
+            game.Us.ID
+        ]
+        or {};
+
     UI.CreateLabel(area)
         .SetText(
             "GLOBAL STOCK MARKET"
         );
 
-    UI.CreateButton(area)
-    .SetText(
-        "MY PORTFOLIO"
-    )
-    .SetOnClick(function()
-
-        ShowStockPortfolio(
-            parent,
-            game
+    local navigation =
+        UI.CreateHorizontalLayoutGroup(
+            area
         );
 
-    end);
+    UI.CreateButton(navigation)
+        .SetText(
+            "MY PORTFOLIO"
+        )
+        .SetFlexibleWidth(1)
+        .SetOnClick(function()
 
-    UI.CreateButton(area)
-    .SetText(
-        "MARKET OVERVIEW"
-    )
-    .SetOnClick(function()
+            ShowStockPortfolio(
+                parent,
+                game
+            );
 
-        ShowMarketOverview(
-            parent,
-            game
-        );
+        end);
 
-    end);
+    UI.CreateButton(navigation)
+        .SetText(
+            "MARKET OVERVIEW"
+        )
+        .SetFlexibleWidth(1)
+        .SetOnClick(function()
+
+            ShowMarketOverview(
+                parent,
+                game
+            );
+
+        end);
 
     UI.CreateLabel(area)
         .SetText(
-            "Buy shares in public companies and track global market performance."
+            "Quick Search"
         );
 
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
+    local searchInput =
+        UI.CreateTextInputField(
+            area
+        )
+            .SetPlaceholderText(
+                "Search company, strategy, or owner..."
+            );
+
+    local resultsHost =
+        UI.CreateVerticalLayoutGroup(
+            area
         );
 
-    local found =
-        false;
+    local resultsGroup =
+        nil;
 
-    for companyID, company
-        in pairs(companies) do
+    local function RenderCompanies()
 
-        if company.active == true
-            and company.delisted ~= true then
+        if resultsGroup ~= nil
+            and not UI.IsDestroyed(
+                resultsGroup
+            )
+        then
 
-            found =
-                true;
+            UI.Destroy(
+                resultsGroup
+            );
+
+        end
+
+        resultsGroup =
+            UI.CreateVerticalLayoutGroup(
+                resultsHost
+            );
+
+        local searchText =
+            string.lower(
+                searchInput.GetText()
+                or ""
+            );
+
+        local matches =
+            {};
+
+        for companyID, company
+            in pairs(companies)
+        do
+
+            if company.active == true
+                and company.delisted ~= true
+            then
+
+                local ownerName =
+                    "";
+
+                if company.ownerPlayerID ~= nil then
+                    ownerName =
+                        GetPlayerName(
+                            game,
+                            company.ownerPlayerID
+                        );
+                end
+
+                local searchable =
+                    string.lower(
+                        tostring(
+                            company.name
+                            or ""
+                        ) ..
+                        " " ..
+                        tostring(
+                            company.strategy
+                            or ""
+                        ) ..
+                        " " ..
+                        tostring(ownerName)
+                    );
+
+                if searchText == ""
+                    or string.find(
+                        searchable,
+                        searchText,
+                        1,
+                        true
+                    ) ~= nil
+                then
+
+                    table.insert(
+                        matches,
+                        {
+                            id = companyID,
+                            company = company,
+                            ownerName = ownerName
+                        }
+                    );
+
+                end
+
+            end
+
+        end
+
+        table.sort(
+            matches,
+            function(a, b)
+
+                return string.lower(
+                    tostring(
+                        a.company.name
+                        or ""
+                    )
+                ) < string.lower(
+                    tostring(
+                        b.company.name
+                        or ""
+                    )
+                );
+
+            end
+        );
+
+        if #matches == 0 then
+
+            UI.CreateLabel(
+                resultsGroup
+            )
+                .SetText(
+                    "No listed companies match your search."
+                );
+
+            return;
+        end
+
+        for _, entry
+            in ipairs(matches)
+        do
+
+            local companyID =
+                entry.id;
+
+            local company =
+                entry.company;
 
             local group =
                 UI.CreateVerticalLayoutGroup(
-                    area
+                    resultsGroup
                 );
 
             local currentPrice =
@@ -4677,10 +5080,6 @@ function ShowStockMarket(
                 company.previousPrice
                 or currentPrice;
 
-            local change =
-                currentPrice
-                - previousPrice;
-
             local changePercent =
                 0;
 
@@ -4688,402 +5087,139 @@ function ShowStockMarket(
 
                 changePercent =
                     (
-                        change
+                        (
+                            currentPrice
+                            - previousPrice
+                        )
                         / previousPrice
                     )
                     * 100;
 
             end
 
-local companyLabel =
-    UI.CreateLabel(group)
-        .SetText(
-            tostring(
-                company.name
-                or
-                "Unknown Company"
-            )
-        );
+            local ownedShares =
+                (
+                    ourNation.stockHoldings
+                    or {}
+                )[
+                    companyID
+                ]
+                or 0;
 
-companyLabel.SetColor(
-    "#D4AF37"
-);
+            local companyLabel =
+                UI.CreateLabel(group)
+                    .SetText(
+                        tostring(
+                            company.name
+                            or "Unknown Company"
+                        )
+                    );
 
-local selectedCompanyID =
-    companyID;
+            companyLabel.SetColor(
+                "#D4AF37"
+            );
 
-UI.CreateButton(group)
-    .SetText(
-        "VIEW COMPANY"
-    )
-    .SetOnClick(function()
+            local summaryRow =
+                UI.CreateHorizontalLayoutGroup(
+                    group
+                );
 
-        ShowCompanyDetails(
-            parent,
-            game,
-            selectedCompanyID
-        );
-
-    end);
-
-            UI.CreateLabel(group)
+            UI.CreateLabel(summaryRow)
                 .SetText(
                     "Price: " ..
                     tostring(currentPrice) ..
-                    " gold"
-                );
-
-local changeLabel =
-    UI.CreateLabel(group)
-        .SetText(
-            "Change: " ..
-            string.format(
-                "%.1f%%",
-                changePercent
-            )
-        );
-
-if changePercent > 0 then
-
-    changeLabel.SetColor(
-        "#32CD32"
-    );
-
-elseif changePercent < 0 then
-
-    changeLabel.SetColor(
-        "#FF4C4C"
-    );
-
-end
-
-            UI.CreateLabel(group)
-                .SetText(
-                    "Shares Available: " ..
+                    " | Available: " ..
                     tostring(
                         company.sharesAvailable
                         or 0
                     )
+                )
+                .SetFlexibleWidth(1);
+
+            local changeLabel =
+                UI.CreateLabel(summaryRow)
+                    .SetText(
+                        string.format(
+                            "%+.1f%%",
+                            changePercent
+                        )
+                    );
+
+            if changePercent > 0 then
+                changeLabel.SetColor("#32CD32");
+            elseif changePercent < 0 then
+                changeLabel.SetColor("#FF4C4C");
+            end
+
+            local detailsRow =
+                UI.CreateHorizontalLayoutGroup(
+                    group
                 );
 
-            UI.CreateLabel(group)
+            UI.CreateLabel(detailsRow)
                 .SetText(
                     "Strategy: " ..
                     tostring(
                         company.strategy
-                        or
-                        "Unknown"
+                        or "Unknown"
                     )
-                );
-local nation =
-    (
-        economy.nations
-        or {}
-    )[
-        game.Us.ID
-    ]
-    or {};
-
-local ownedShares =
-    (
-        nation.stockHoldings
-        or {}
-    )[
-        companyID
-    ]
-    or 0;
-
-local availableGold =
-    GetPlayerGold(
-        game,
-        game.Us.ID
-    );
-
-UI.CreateLabel(group)
-    .SetText(
-        "Your Shares: " ..
-        tostring(
-            ownedShares
-        )
-    );
-
-UI.CreateLabel(group)
-    .SetText(
-        "Available Gold: " ..
-        tostring(
-            availableGold
-        )
-    );
-local selectedShares =
-    1;
-
-local purchaseLabel =
-    UI.CreateLabel(group);
-
-local function UpdatePurchasePreview()
-
-    local price =
-        company.currentPrice
-        or company.startingPrice
-        or 0;
-
-    local totalCost =
-        selectedShares
-        * price;
-
-    purchaseLabel.SetText(
-        "Buy " ..
-        tostring(selectedShares) ..
-        " share(s) | Cost: " ..
-        tostring(totalCost) ..
-        " gold"
-    );
-
-end
-
-local shareButtons =
-    UI.CreateHorizontalLayoutGroup(
-        group
-    );
-
-UI.CreateButton(shareButtons)
-    .SetText("-1")
-    .SetOnClick(function()
-
-        selectedShares =
-            math.max(
-                1,
-                selectedShares - 1
-            );
-
-        UpdatePurchasePreview();
-
-    end);
-
-UI.CreateButton(shareButtons)
-    .SetText("+1")
-    .SetOnClick(function()
-
-        selectedShares =
-            math.min(
-                company.sharesAvailable
-                or 1,
-                selectedShares + 1
-            );
-
-        UpdatePurchasePreview();
-
-    end);
-
-UI.CreateButton(shareButtons)
-    .SetText("+5")
-    .SetOnClick(function()
-
-        selectedShares =
-            math.min(
-                company.sharesAvailable
-                or 1,
-                selectedShares + 5
-            );
-
-        UpdatePurchasePreview();
-
-    end);
-
-UI.CreateButton(group)
-    .SetText(
-        "BUY SHARES"
-    )
-    .SetOnClick(function()
-
-        game.SendGameCustomMessage(
-            "Buying shares...",
-            {
-                type =
-                    "buyStock",
-
-                companyID =
-                    companyID,
-
-                shares =
-                    selectedShares
-            },
-            function(result)
-
-                if result ~= nil
-                    and result.success == true then
-
-                    ShowStockMarket(
-                        parent,
-                        game
-                    );
-
-                end
-
-            end
-        );
-
-    end);
-
-UpdatePurchasePreview();
-local sellShares =
-    1;
-
-local sellLabel =
-    UI.CreateLabel(group);
-
-local function UpdateSellPreview()
-
-    local sellableShares =
-        ownedShares;
-
-    if company.founderPlayerID
-        == game.Us.ID then
-
-        sellableShares =
-            math.max(
-                0,
-                ownedShares
-                - (
-                    company.founderShares
-                    or 0
                 )
-            );
+                .SetFlexibleWidth(1);
 
-    end
+            UI.CreateLabel(detailsRow)
+                .SetText(
+                    "Your Shares: " ..
+                    tostring(ownedShares)
+                )
+                .SetFlexibleWidth(1);
 
-if sellableShares <= 0 then
+            if entry.ownerName ~= "" then
 
-    sellShares =
-        0;
-
-elseif sellShares > sellableShares then
-
-    sellShares =
-        sellableShares;
-
-elseif sellShares < 1 then
-
-    sellShares =
-        1;
-
-end
-
-    local price =
-        company.currentPrice
-        or company.startingPrice
-        or 0;
-
-    local totalValue =
-        sellShares
-        * price;
-
-    sellLabel.SetText(
-        "Sell " ..
-        tostring(sellShares) ..
-        " share(s) | Value: " ..
-        tostring(totalValue) ..
-        " gold"
-    );
-
-end
-
-local sellButtons =
-    UI.CreateHorizontalLayoutGroup(
-        group
-    );
-
-UI.CreateButton(sellButtons)
-    .SetText("-1")
-    .SetOnClick(function()
-
-        sellShares =
-            math.max(
-                1,
-                sellShares - 1
-            );
-
-        UpdateSellPreview();
-
-    end);
-
-UI.CreateButton(sellButtons)
-    .SetText("+1")
-    .SetOnClick(function()
-
-        sellShares =
-            sellShares + 1;
-
-        UpdateSellPreview();
-
-    end);
-
-UI.CreateButton(sellButtons)
-    .SetText("+5")
-    .SetOnClick(function()
-
-        sellShares =
-            sellShares + 5;
-
-        UpdateSellPreview();
-
-    end);
-
-UI.CreateButton(group)
-    .SetText(
-        "SELL SHARES"
-    )
-    .SetOnClick(function()
-
-if sellShares <= 0 then
-    return;
-end
-        game.SendGameCustomMessage(
-            "Selling shares...",
-            {
-                type =
-                    "sellStock",
-
-                companyID =
-                    companyID,
-
-                shares =
-                    sellShares
-            },
-            function(result)
-
-                if result ~= nil
-                    and result.success == true then
-
-                    ShowStockMarket(
-                        parent,
-                        game
+                UI.CreateLabel(group)
+                    .SetText(
+                        "Owner: " ..
+                        tostring(
+                            entry.ownerName
+                        ) ..
+                        " | Market Cap: " ..
+                        tostring(
+                            company.marketCap
+                            or 0
+                        )
                     );
 
-                end
-
             end
-        );
 
-    end);
+            UI.CreateButton(group)
+                .SetText(
+                    "VIEW / TRADE COMPANY"
+                )
+                .SetOnClick(function()
 
-UpdateSellPreview();
+                    ShowCompanyDetails(
+                        parent,
+                        game,
+                        companyID
+                    );
+
+                end);
+
             UI.CreateLabel(group)
                 .SetText(
                     "----------------------------------------"
                 );
 
         end
-    end
-
-    if not found then
-
-        UI.CreateLabel(area)
-            .SetText(
-                "No companies are currently listed on the market."
-            );
 
     end
+
+    searchInput.SetOnValueChanged(function()
+
+        RenderCompanies();
+
+    end);
+
+    RenderCompanies();
 
 end
 
@@ -5186,22 +5322,29 @@ UI.CreateButton(area)
             "----------------------------------------"
         );
 
-    UI.CreateLabel(area)
-        .SetText(
-            "Stock Price: " ..
-            tostring(currentPrice) ..
-            " gold"
+    local statsRow1 =
+        UI.CreateHorizontalLayoutGroup(
+            area
         );
 
+    UI.CreateLabel(statsRow1)
+        .SetText(
+            "Price: " ..
+            tostring(currentPrice) ..
+            " gold"
+        )
+        .SetFlexibleWidth(1);
+
     local changeLabel =
-        UI.CreateLabel(area)
+        UI.CreateLabel(statsRow1)
             .SetText(
                 "Change: " ..
                 string.format(
                     "%.1f%%",
                     changePercent
                 )
-            );
+            )
+            .SetFlexibleWidth(1);
 
     if changePercent > 0 then
 
@@ -5217,61 +5360,428 @@ UI.CreateButton(area)
 
     end
 
-    UI.CreateLabel(area)
+    local statsRow2 =
+        UI.CreateHorizontalLayoutGroup(
+            area
+        );
+
+    UI.CreateLabel(statsRow2)
         .SetText(
             "Market Cap: " ..
             tostring(
                 company.marketCap
                 or 0
             )
-        );
+        )
+        .SetFlexibleWidth(1);
 
-    UI.CreateLabel(area)
+    UI.CreateLabel(statsRow2)
         .SetText(
             "Total Shares: " ..
             tostring(
                 company.totalShares
                 or 0
             )
+        )
+        .SetFlexibleWidth(1);
+
+    local statsRow3 =
+        UI.CreateHorizontalLayoutGroup(
+            area
         );
 
-    UI.CreateLabel(area)
+    UI.CreateLabel(statsRow3)
         .SetText(
-            "Shares Available: " ..
+            "Available: " ..
             tostring(
                 company.sharesAvailable
                 or 0
             )
-        );
+        )
+        .SetFlexibleWidth(1);
 
-    UI.CreateLabel(area)
+    UI.CreateLabel(statsRow3)
         .SetText(
             "Strategy: " ..
             tostring(
                 company.strategy
-                or
-                "Unknown"
+                or "Unknown"
             )
+        )
+        .SetFlexibleWidth(1);
+
+    local statsRow4 =
+        UI.CreateHorizontalLayoutGroup(
+            area
         );
 
-    UI.CreateLabel(area)
+    UI.CreateLabel(statsRow4)
         .SetText(
-            "Dividend Per Share: " ..
+            "Dividend/Share: " ..
             string.format(
                 "%.2f",
                 company.dividendPerShare
                 or 0
             )
-        );
+        )
+        .SetFlexibleWidth(1);
 
-    UI.CreateLabel(area)
+    UI.CreateLabel(statsRow4)
         .SetText(
-            "Total Dividends Paid: " ..
+            "Dividends Paid: " ..
             tostring(
                 company.totalDividendsPaid
                 or 0
             )
+        )
+        .SetFlexibleWidth(1);
+
+-- ============================================
+-- TRADE SHARES
+-- ============================================
+
+local yourNation =
+    (
+        economy.nations
+        or {}
+    )[
+        game.Us.ID
+    ]
+    or {};
+
+local yourShares =
+    (
+        yourNation.stockHoldings
+        or {}
+    )[
+        companyID
+    ]
+    or 0;
+
+local availableGold =
+    GetPlayerGold(
+        game,
+        game.Us.ID
+    );
+
+UI.CreateLabel(area)
+    .SetText(
+        "----------------------------------------"
+    );
+
+UI.CreateLabel(area)
+    .SetText(
+        "TRADE SHARES"
+    );
+
+UI.CreateLabel(area)
+    .SetText(
+        "Available Gold: " ..
+        tostring(availableGold) ..
+        " | Your Shares: " ..
+        tostring(yourShares)
+    );
+
+local selectedBuyShares =
+    1;
+
+local buyPreview =
+    UI.CreateLabel(area);
+
+local function UpdateBuyPreview()
+
+    local availableShares =
+        company.sharesAvailable
+        or 0;
+
+    if availableShares <= 0 then
+
+        selectedBuyShares =
+            0;
+
+        buyPreview.SetText(
+            "No public shares are currently available."
         );
+
+        return;
+
+    end
+
+    selectedBuyShares =
+        math.max(
+            1,
+            math.min(
+                selectedBuyShares,
+                availableShares
+            )
+        );
+
+    buyPreview.SetText(
+        "Buy " ..
+        tostring(selectedBuyShares) ..
+        " share(s) | Cost: " ..
+        tostring(
+            selectedBuyShares
+            * currentPrice
+        ) ..
+        " gold"
+    );
+
+end
+
+local buyButtons =
+    UI.CreateHorizontalLayoutGroup(
+        area
+    );
+
+UI.CreateButton(buyButtons)
+    .SetText("-1")
+    .SetFlexibleWidth(1)
+    .SetOnClick(function()
+
+        selectedBuyShares =
+            math.max(
+                1,
+                selectedBuyShares - 1
+            );
+
+        UpdateBuyPreview();
+
+    end);
+
+UI.CreateButton(buyButtons)
+    .SetText("+1")
+    .SetFlexibleWidth(1)
+    .SetOnClick(function()
+
+        selectedBuyShares =
+            selectedBuyShares + 1;
+
+        UpdateBuyPreview();
+
+    end);
+
+UI.CreateButton(buyButtons)
+    .SetText("+5")
+    .SetFlexibleWidth(1)
+    .SetOnClick(function()
+
+        selectedBuyShares =
+            selectedBuyShares + 5;
+
+        UpdateBuyPreview();
+
+    end);
+
+local buyButton =
+    UI.CreateButton(area)
+        .SetText(
+            "BUY SHARES"
+        )
+        .SetInteractable(
+            (company.sharesAvailable or 0) > 0
+        )
+        .SetOnClick(function()
+
+            if selectedBuyShares <= 0 then
+                return;
+            end
+
+            game.SendGameCustomMessage(
+                "Buying shares...",
+                {
+                    type = "buyStock",
+                    companyID = companyID,
+                    shares = selectedBuyShares
+                },
+                function(result)
+
+                    if result ~= nil
+                        and result.success == true
+                    then
+
+                        ShowCompanyDetails(
+                            parent,
+                            game,
+                            companyID
+                        );
+
+                    elseif result ~= nil
+                        and result.message ~= nil
+                    then
+
+                        UI.Alert(
+                            tostring(
+                                result.message
+                            )
+                        );
+
+                    end
+
+                end
+            );
+
+        end);
+
+UpdateBuyPreview();
+
+local protectedFounderShares =
+    0;
+
+if company.founderPlayerID == game.Us.ID then
+
+    protectedFounderShares =
+        company.founderShares
+        or 0;
+
+end
+
+local sellableShares =
+    math.max(
+        0,
+        yourShares
+        - protectedFounderShares
+    );
+
+local selectedSellShares =
+    sellableShares > 0
+    and 1
+    or 0;
+
+local sellPreview =
+    UI.CreateLabel(area);
+
+local function UpdateSellPreview()
+
+    if sellableShares <= 0 then
+
+        selectedSellShares =
+            0;
+
+        sellPreview.SetText(
+            "No sellable shares available."
+        );
+
+        return;
+
+    end
+
+    selectedSellShares =
+        math.max(
+            1,
+            math.min(
+                selectedSellShares,
+                sellableShares
+            )
+        );
+
+    sellPreview.SetText(
+        "Sell " ..
+        tostring(selectedSellShares) ..
+        " share(s) | Value: " ..
+        tostring(
+            selectedSellShares
+            * currentPrice
+        ) ..
+        " gold"
+    );
+
+end
+
+local sellButtons =
+    UI.CreateHorizontalLayoutGroup(
+        area
+    );
+
+UI.CreateButton(sellButtons)
+    .SetText("-1")
+    .SetFlexibleWidth(1)
+    .SetOnClick(function()
+
+        selectedSellShares =
+            math.max(
+                1,
+                selectedSellShares - 1
+            );
+
+        UpdateSellPreview();
+
+    end);
+
+UI.CreateButton(sellButtons)
+    .SetText("+1")
+    .SetFlexibleWidth(1)
+    .SetOnClick(function()
+
+        selectedSellShares =
+            selectedSellShares + 1;
+
+        UpdateSellPreview();
+
+    end);
+
+UI.CreateButton(sellButtons)
+    .SetText("+5")
+    .SetFlexibleWidth(1)
+    .SetOnClick(function()
+
+        selectedSellShares =
+            selectedSellShares + 5;
+
+        UpdateSellPreview();
+
+    end);
+
+UI.CreateButton(area)
+    .SetText(
+        "SELL SHARES"
+    )
+    .SetInteractable(
+        sellableShares > 0
+    )
+    .SetOnClick(function()
+
+        if selectedSellShares <= 0 then
+            return;
+        end
+
+        game.SendGameCustomMessage(
+            "Selling shares...",
+            {
+                type = "sellStock",
+                companyID = companyID,
+                shares = selectedSellShares
+            },
+            function(result)
+
+                if result ~= nil
+                    and result.success == true
+                then
+
+                    ShowCompanyDetails(
+                        parent,
+                        game,
+                        companyID
+                    );
+
+                elseif result ~= nil
+                    and result.message ~= nil
+                then
+
+                    UI.Alert(
+                        tostring(
+                            result.message
+                        )
+                    );
+
+                end
+
+            end
+        );
+
+    end);
+
+UpdateSellPreview();
 
 UI.CreateLabel(area)
     .SetText(
@@ -5501,10 +6011,16 @@ end
 
         end
 
-        UI.CreateButton(area)
+        local issueButtons =
+            UI.CreateHorizontalLayoutGroup(
+                area
+            );
+
+        UI.CreateButton(issueButtons)
             .SetText(
-                "+10 SHARES"
+                "+10"
             )
+            .SetFlexibleWidth(1)
             .SetOnClick(function()
 
                 IssueShares(
@@ -5513,10 +6029,11 @@ end
 
             end);
 
-        UI.CreateButton(area)
+        UI.CreateButton(issueButtons)
             .SetText(
-                "+25 SHARES"
+                "+25"
             )
+            .SetFlexibleWidth(1)
             .SetOnClick(function()
 
                 IssueShares(
@@ -5525,10 +6042,11 @@ end
 
             end);
 
-        UI.CreateButton(area)
+        UI.CreateButton(issueButtons)
             .SetText(
-                "+50 SHARES"
+                "+50"
             )
+            .SetFlexibleWidth(1)
             .SetOnClick(function()
 
                 IssueShares(
@@ -5555,24 +6073,6 @@ UI.CreateLabel(area)
     .SetText(
         "YOUR POSITION"
     );
-
-local yourNation =
-    (
-        economy.nations
-        or {}
-    )[
-        game.Us.ID
-    ]
-    or {};
-
-local yourShares =
-    (
-        yourNation.stockHoldings
-        or {}
-    )[
-        companyID
-    ]
-    or 0;
 
 local yourCostBasis =
     (
@@ -10175,144 +10675,6 @@ local function GetIdeologyEffectsText(
 
     return
         "Ideology Effects: None";
-end
-
-function GetPolicyPreviewText(
-    game,
-    taxPolicy,
-    ideology
-)
-
-    local taxCommerce = 0;
-    local taxMarket = 0;
-    local taxInvestment = 0;
-    local taxConfidence = 0;
-
-    if taxPolicy == "Low" then
-
-        taxCommerce = -10;
-        taxMarket = 10;
-        taxInvestment = 10;
-        taxConfidence = 5;
-
-    elseif taxPolicy == "High" then
-
-        taxCommerce = 10;
-        taxMarket = -10;
-        taxInvestment = -10;
-        taxConfidence = -5;
-
-    end
-
-    local ideologyCommerce = 0;
-    local ideologyMarket = 0;
-    local ideologyInvestment = 0;
-    local ideologyConfidence = 0;
-
-    if ideology == "Free Market" then
-
-        ideologyCommerce = -3;
-        ideologyMarket = 8;
-        ideologyInvestment = 6;
-        ideologyConfidence = 2;
-
-    elseif ideology == "Capitalist" then
-
-        ideologyCommerce = -2;
-        ideologyMarket = 6;
-        ideologyInvestment = 5;
-        ideologyConfidence = 3;
-
-    elseif ideology == "Social Democratic" then
-
-        ideologyCommerce = 2;
-        ideologyMarket = 2;
-        ideologyInvestment = 3;
-        ideologyConfidence = 2;
-
-    elseif ideology == "State Capitalist" then
-
-        ideologyCommerce = 4;
-        ideologyMarket = 1;
-        ideologyInvestment = 5;
-        ideologyConfidence = 4;
-
-    elseif ideology == "Socialist" then
-
-        ideologyCommerce = 5;
-        ideologyMarket = -5;
-        ideologyInvestment = 1;
-        ideologyConfidence = 1;
-
-    end
-
-    local totalCommerce =
-        taxCommerce
-        + ideologyCommerce;
-
-    local totalMarket =
-        taxMarket
-        + ideologyMarket;
-
-    local totalInvestment =
-        taxInvestment
-        + ideologyInvestment;
-
-    local totalConfidence =
-        taxConfidence
-        + ideologyConfidence;
-
-    local currentCommerce =
-        GetPlayerIncome(
-            game,
-            game.Us.ID
-        );
-
-    local projectedCommerce =
-        math.floor(
-            currentCommerce
-            * (
-                1
-                + totalCommerce / 100
-            )
-            + 0.5
-        );
-
-    local function SignedNumber(
-        value,
-        suffix
-    )
-
-        if value > 0 then
-
-            return
-                "+"
-                .. tostring(value)
-                .. suffix;
-
-        end
-
-        return
-            tostring(value)
-            .. suffix;
-
-    end
-
-    return
-        "Combined Policy Impact\n" ..
-        "Commerce: " ..
-        SignedNumber(totalCommerce, "%") ..
-        " | Market: " ..
-        SignedNumber(totalMarket, "%") ..
-        " | Investment: " ..
-        SignedNumber(totalInvestment, "%") ..
-        " | Company Confidence: " ..
-        SignedNumber(totalConfidence, "") ..
-        "\nEstimated Commerce/Turn: " ..
-        tostring(currentCommerce) ..
-        " -> ~" ..
-        tostring(projectedCommerce);
-
 end
 
     local function UpdateSelections()
