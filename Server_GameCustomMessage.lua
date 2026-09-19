@@ -54,7 +54,10 @@ local VALID_IDEOLOGIES = {
     ["Capitalist"] = true,
     ["Social Democratic"] = true,
     ["State Capitalist"] = true,
-    ["Socialist"] = true
+    ["Socialist"] = true,
+    ["Communist"] = true,
+    ["Fascist"] = true,
+    ["Nationalist"] = true
 };
 
 
@@ -1953,6 +1956,26 @@ local function EnsureNation(
 
 
         -- =============================================
+        -- PLAYER AI MANAGER
+        -- =============================================
+
+        aiManagerEnabled =
+            false,
+
+        aiManagerBudget =
+            100,
+
+        aiManagerBudgetRemaining =
+            0,
+
+        aiManagerCancelTurn =
+            nil,
+
+        aiManagerLastProcessedTurn =
+            0,
+
+
+        -- =============================================
         -- NOTIFICATIONS
         -- =============================================
 
@@ -3546,6 +3569,136 @@ nation.stockCostBasis[
                 " is now your flagship company."
         });
 
+
+        return;
+    end
+
+
+    -- =====================================================
+    -- PLAYER AI MANAGER
+    -- =====================================================
+
+    if payload.type
+        == "updateAIManager" then
+
+        if GetSetting(
+            "PlayerAIManagerEnabled",
+            true
+        ) ~= true then
+
+            setReturn({
+                success = false,
+                message =
+                    "The host has disabled the AI Manager."
+            });
+
+            return;
+        end
+
+        local nation =
+            EnsureNation(
+                data,
+                game,
+                playerID
+            );
+
+        local economy =
+            data.globalEconomy
+            or {};
+
+        local currentTurn =
+            economy.currentEconomyTurn
+            or data.tradeTurn
+            or 1;
+
+        local requestedEnabled =
+            payload.enabled == true;
+
+        local requestedBudget =
+            tonumber(
+                payload.budget
+            )
+            or nation.aiManagerBudget
+            or 100;
+
+        requestedBudget =
+            math.max(
+                25,
+                math.min(
+                    100000,
+                    math.floor(
+                        requestedBudget
+                    )
+                )
+            );
+
+        nation.aiManagerBudget =
+            requestedBudget;
+
+        if requestedEnabled then
+
+            nation.aiManagerEnabled =
+                true;
+
+            nation.aiManagerCancelTurn =
+                nil;
+
+            setReturn({
+                success = true,
+                enabled = true,
+                budget = requestedBudget,
+                message =
+                    "AI Manager enabled with a " ..
+                    tostring(requestedBudget) ..
+                    " gold per-turn spending budget."
+            });
+
+        else
+
+            if nation.aiManagerEnabled == true then
+
+                nation.aiManagerCancelTurn =
+                    currentTurn + 1;
+
+                setReturn({
+                    success = true,
+                    enabled = true,
+                    pendingCancel = true,
+                    cancelTurn =
+                        nation.aiManagerCancelTurn,
+                    budget = requestedBudget,
+                    message =
+                        "AI Manager cancellation scheduled. It will stop after one more turn."
+                });
+
+            else
+
+                nation.aiManagerEnabled =
+                    false;
+
+                nation.aiManagerCancelTurn =
+                    nil;
+
+                setReturn({
+                    success = true,
+                    enabled = false,
+                    budget = requestedBudget,
+                    message =
+                        "AI Manager is already disabled."
+                });
+
+            end
+
+        end
+
+        economy.nations[playerID] =
+            nation;
+
+        data.globalEconomy =
+            economy;
+
+        Mod.PublicGameData =
+            data;
 
         return;
     end

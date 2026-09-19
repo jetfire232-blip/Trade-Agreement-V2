@@ -594,6 +594,13 @@ function Client_PresentConfigureUI(rootParent)
             true
         );
 
+    local playerAIManagerEnabled =
+        GetBoolSetting(
+            settings,
+            "PlayerAIManagerEnabled",
+            true
+        );
+
 
     -- =====================================================
     -- TITLE
@@ -1244,6 +1251,20 @@ function Client_PresentConfigureUI(rootParent)
         "AITaxManagementEnabled",
         "Allow Smart AI to dynamically manage taxation",
         aiTaxManagementEnabled
+    );
+
+
+    AddSection(
+        root,
+        "PLAYER AI MANAGER",
+        "Optional automation for human players. It manages stocks and investment projects within a player-set budget, but never controls diplomacy, trade agreements, taxation, ideology, or military orders."
+    );
+
+    AddCheckBox(
+        root,
+        "PlayerAIManagerEnabled",
+        "Allow human players to enable the AI Manager",
+        playerAIManagerEnabled
     );
 
 

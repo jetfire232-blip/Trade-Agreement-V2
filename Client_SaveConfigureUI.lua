@@ -407,6 +407,11 @@ function Client_SaveConfigureUI(
             "AITaxManagementEnabled"
         );
 
+    local playerAIManagerEnabled =
+        ReadBool(
+            "PlayerAIManagerEnabled"
+        );
+
 
     -- =====================================================
     -- VALIDATE GENERAL
@@ -1060,12 +1065,15 @@ function Client_SaveConfigureUI(
     Mod.Settings.AITaxManagementEnabled =
         aiTaxManagementEnabled;
 
+    Mod.Settings.PlayerAIManagerEnabled =
+        playerAIManagerEnabled;
+
 
     -- =====================================================
     -- VERSION
     -- =====================================================
 
     Mod.Settings.EconomyModVersion =
-        2;
+        3;
 
 end

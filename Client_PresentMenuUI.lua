@@ -2597,6 +2597,27 @@ function GetPolicyPreviewText(
         ideologyInvestment = 1;
         ideologyConfidence = 1;
 
+    elseif ideology == "Communist" then
+
+        ideologyCommerce = 7;
+        ideologyMarket = -9;
+        ideologyInvestment = -2;
+        ideologyConfidence = 0;
+
+    elseif ideology == "Fascist" then
+
+        ideologyCommerce = 3;
+        ideologyMarket = -2;
+        ideologyInvestment = 1;
+        ideologyConfidence = 3;
+
+    elseif ideology == "Nationalist" then
+
+        ideologyCommerce = 2;
+        ideologyMarket = -1;
+        ideologyInvestment = 0;
+        ideologyConfidence = 2;
+
     end
 
     local totalCommerce =
@@ -3832,6 +3853,26 @@ function ShowOverview(
 
         end
 
+
+        if GetClientSetting(
+            "PlayerAIManagerEnabled",
+            true
+        ) == true then
+
+            UI.CreateButton(area)
+                .SetText(
+                    "AI MANAGER"
+                )
+                .SetOnClick(function()
+
+                    ShowAIManagerMenu(
+                        parent,
+                        game
+                    );
+
+                end);
+
+        end
 
         UI.CreateLabel(area)
             .SetText(
@@ -9868,6 +9909,270 @@ function ShowInvestmentHistory(
             shown + 1;
     end
 end
+function ShowAIManagerMenu(
+    parent,
+    game
+)
+
+    local area =
+        CreateContentArea(
+            parent
+        );
+
+    UI.CreateButton(area)
+        .SetText(
+            "BACK TO OVERVIEW"
+        )
+        .SetOnClick(function()
+
+            ShowOverview(
+                parent,
+                game
+            );
+
+        end);
+
+    UI.CreateLabel(area)
+        .SetText(
+            "AI MANAGER"
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Optional automation for your economy. The AI Manager can buy/sell stocks and create/invest in projects within your budget. It cannot control diplomacy, trade agreements, taxation, ideology, or military orders."
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+    if GetClientSetting(
+        "PlayerAIManagerEnabled",
+        true
+    ) ~= true then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "The host has disabled the AI Manager."
+            );
+
+        return;
+    end
+
+    local nation =
+        GetOurNationState(
+            game
+        );
+
+    if nation == nil
+        or nation.setupComplete ~= true then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "Complete National Setup before using the AI Manager."
+            );
+
+        return;
+    end
+
+    local economy =
+        (
+            Mod.PublicGameData
+            or {}
+        ).globalEconomy
+        or {};
+
+    local enabled =
+        nation.aiManagerEnabled == true;
+
+    local cancelTurn =
+        nation.aiManagerCancelTurn;
+
+    local statusText =
+        enabled
+        and "ACTIVE"
+        or "OFF";
+
+    if enabled
+        and cancelTurn ~= nil then
+
+        statusText =
+            "CANCEL PENDING - stops on Turn " ..
+            tostring(
+                cancelTurn
+            );
+
+    end
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Status: " ..
+            statusText
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Current Budget: " ..
+            tostring(
+                nation.aiManagerBudget
+                or 100
+            ) ..
+            " gold per turn"
+        );
+
+    if enabled then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "Budget Remaining This Turn: " ..
+                tostring(
+                    nation.aiManagerBudgetRemaining
+                    or 0
+                )
+            );
+
+    end
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Set the maximum amount of gold the manager may spend in one turn. Minimum: 25."
+        );
+
+    local budgetInput =
+        UI.CreateTextInputField(
+            area
+        );
+
+    budgetInput.SetText(
+        tostring(
+            nation.aiManagerBudget
+            or 100
+        )
+    );
+
+    local quickBudgetRow =
+        UI.CreateHorizontalLayoutGroup(
+            area
+        );
+
+    local function SetBudgetText(value)
+        budgetInput.SetText(
+            tostring(value)
+        );
+    end
+
+    UI.CreateButton(quickBudgetRow)
+        .SetText("100")
+        .SetOnClick(function() SetBudgetText(100); end);
+
+    UI.CreateButton(quickBudgetRow)
+        .SetText("250")
+        .SetOnClick(function() SetBudgetText(250); end);
+
+    UI.CreateButton(quickBudgetRow)
+        .SetText("500")
+        .SetOnClick(function() SetBudgetText(500); end);
+
+    UI.CreateButton(quickBudgetRow)
+        .SetText("1000")
+        .SetOnClick(function() SetBudgetText(1000); end);
+
+    local actionRow =
+        UI.CreateHorizontalLayoutGroup(
+            area
+        );
+
+    local function SendManagerUpdate(
+        shouldEnable
+    )
+
+        local budget =
+            tonumber(
+                budgetInput.GetText()
+            );
+
+        if budget == nil then
+
+            UI.Alert(
+                "Enter a valid budget amount."
+            );
+
+            return;
+        end
+
+        budget =
+            math.max(
+                25,
+                math.floor(
+                    budget
+                )
+            );
+
+        game.SendGameCustomMessage(
+            "Updating AI Manager...",
+            {
+                type =
+                    "updateAIManager",
+
+                enabled =
+                    shouldEnable,
+
+                budget =
+                    budget
+            },
+            function(result)
+
+                if result ~= nil
+                    and result.message ~= nil then
+
+                    UI.Alert(
+                        result.message
+                    );
+
+                end
+
+                ShowAIManagerMenu(
+                    parent,
+                    game
+                );
+
+            end
+        );
+
+    end
+
+    UI.CreateButton(actionRow)
+        .SetText(
+            enabled
+            and "UPDATE BUDGET"
+            or "ENABLE MANAGER"
+        )
+        .SetOnClick(function()
+            SendManagerUpdate(true);
+        end);
+
+    if enabled
+        and cancelTurn == nil then
+
+        UI.CreateButton(actionRow)
+            .SetText(
+                "CANCEL MANAGER"
+            )
+            .SetOnClick(function()
+                SendManagerUpdate(false);
+            end);
+
+    end
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Cancellation rule: once requested, cancellation becomes effective on the next economy turn."
+        );
+
+end
+
+
 function ShowGlobalEconomy(
     parent,
     game,
@@ -10642,39 +10947,24 @@ local function GetIdeologyEffectsText(
 )
 
     if ideology == "Free Market" then
-
-        return
-            "Ideology Effects - Free Market\n" ..
-            "Government Commerce: -3% | Market: +8% | Investment: +6% | Company Confidence: +2";
-
+        return "Ideology Effects - Free Market\nGovernment Commerce: -3% | Market: +8% | Investment: +6% | Company Confidence: +2";
     elseif ideology == "Capitalist" then
-
-        return
-            "Ideology Effects - Capitalist\n" ..
-            "Government Commerce: -2% | Market: +6% | Investment: +5% | Company Confidence: +3";
-
+        return "Ideology Effects - Capitalist\nGovernment Commerce: -2% | Market: +6% | Investment: +5% | Company Confidence: +3";
     elseif ideology == "Social Democratic" then
-
-        return
-            "Ideology Effects - Social Democratic\n" ..
-            "Government Commerce: +2% | Market: +2% | Investment: +3% | Company Confidence: +2";
-
+        return "Ideology Effects - Social Democratic\nGovernment Commerce: +2% | Market: +2% | Investment: +3% | Company Confidence: +2";
     elseif ideology == "State Capitalist" then
-
-        return
-            "Ideology Effects - State Capitalist\n" ..
-            "Government Commerce: +4% | Market: +1% | Investment: +5% | Company Confidence: +4";
-
+        return "Ideology Effects - State Capitalist\nGovernment Commerce: +4% | Market: +1% | Investment: +5% | Company Confidence: +4";
     elseif ideology == "Socialist" then
-
-        return
-            "Ideology Effects - Socialist\n" ..
-            "Government Commerce: +5% | Market: -5% | Investment: +1% | Company Confidence: +1";
-
+        return "Ideology Effects - Socialist\nGovernment Commerce: +5% | Market: -5% | Investment: +1% | Company Confidence: +1";
+    elseif ideology == "Communist" then
+        return "Ideology Effects - Communist\nGovernment Commerce: +7% | Market: -9% | Investment: -2% | Company Confidence: +0";
+    elseif ideology == "Fascist" then
+        return "Ideology Effects - Fascist\nGovernment Commerce: +3% | Market: -2% | Investment: +1% | Company Confidence: +3";
+    elseif ideology == "Nationalist" then
+        return "Ideology Effects - Nationalist\nGovernment Commerce: +2% | Market: -1% | Investment: +0% | Company Confidence: +2";
     end
 
-    return
-        "Ideology Effects: None";
+    return "Ideology Effects: None";
 end
 
     local function UpdateSelections()
@@ -10860,13 +11150,42 @@ end
         end);
 
 
+    local ideologyRow3 =
+        UI.CreateHorizontalLayoutGroup(
+            area
+        );
+
+    UI.CreateButton(ideologyRow3)
+        .SetText("Communist")
+        .SetOnClick(function()
+            selectedIdeology = "Communist";
+            UpdateSelections();
+        end);
+
+    UI.CreateButton(ideologyRow3)
+        .SetText("Fascist")
+        .SetOnClick(function()
+            selectedIdeology = "Fascist";
+            UpdateSelections();
+        end);
+
+    UI.CreateButton(ideologyRow3)
+        .SetText("Nationalist")
+        .SetOnClick(function()
+            selectedIdeology = "Nationalist";
+            UpdateSelections();
+        end);
+
     UI.CreateLabel(area)
         .SetText(
             "Free Market - private-market growth and investment upside, with greater volatility.\n" ..
             "Capitalist - strong private companies, investment activity, and shareholder returns.\n" ..
             "Social Democratic - balanced markets, taxation, public development, and stability.\n" ..
             "State Capitalist - government-directed development and strategic intervention.\n" ..
-            "Socialist - stronger public development and stability with less private-market upside."
+            "Socialist - stronger public development and stability with less private-market upside.\n" ..
+            "Communist - strong state Commerce and public control, with much weaker private-market activity.\n" ..
+            "Fascist - state-directed mobilization and company confidence, with constrained private markets.\n" ..
+            "Nationalist - domestic Commerce and national industry focus with limited foreign-market emphasis."
         );
 
 

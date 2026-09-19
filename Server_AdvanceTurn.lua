@@ -1480,6 +1480,26 @@ function EnsureEconomyNation(
 
 
             -- =============================================
+            -- PLAYER AI MANAGER
+            -- =============================================
+
+            aiManagerEnabled =
+                false,
+
+            aiManagerBudget =
+                100,
+
+            aiManagerBudgetRemaining =
+                0,
+
+            aiManagerCancelTurn =
+                nil,
+
+            aiManagerLastProcessedTurn =
+                0,
+
+
+            -- =============================================
             -- NOTIFICATIONS
             -- =============================================
 
@@ -3955,29 +3975,24 @@ function GetIdeologyTaxCommerceModifierPercent(
         or "Social Democratic";
 
     if ideology == "Free Market" then
-
         return -3;
-
     elseif ideology == "Capitalist" then
-
         return -2;
-
     elseif ideology == "Social Democratic" then
-
         return 2;
-
     elseif ideology == "State Capitalist" then
-
         return 4;
-
     elseif ideology == "Socialist" then
-
         return 5;
-
+    elseif ideology == "Communist" then
+        return 7;
+    elseif ideology == "Fascist" then
+        return 3;
+    elseif ideology == "Nationalist" then
+        return 2;
     end
 
     return 0;
-
 end
 
 function CalculateTaxCommerceAdjustment(
@@ -4074,29 +4089,24 @@ function GetIdeologyMarketModifierPercent(
         or "Social Democratic";
 
     if ideology == "Free Market" then
-
         return 8;
-
     elseif ideology == "Capitalist" then
-
         return 6;
-
     elseif ideology == "Social Democratic" then
-
         return 2;
-
     elseif ideology == "State Capitalist" then
-
         return 1;
-
     elseif ideology == "Socialist" then
-
         return -5;
-
+    elseif ideology == "Communist" then
+        return -9;
+    elseif ideology == "Fascist" then
+        return -2;
+    elseif ideology == "Nationalist" then
+        return -1;
     end
 
     return 0;
-
 end
 
 function GetTaxInvestmentModifierPercent(
@@ -4138,29 +4148,24 @@ function GetIdeologyInvestmentModifierPercent(
         or "Social Democratic";
 
     if ideology == "Free Market" then
-
         return 6;
-
     elseif ideology == "Capitalist" then
-
         return 5;
-
     elseif ideology == "Social Democratic" then
-
         return 3;
-
     elseif ideology == "State Capitalist" then
-
         return 5;
-
     elseif ideology == "Socialist" then
-
         return 1;
-
+    elseif ideology == "Communist" then
+        return -2;
+    elseif ideology == "Fascist" then
+        return 1;
+    elseif ideology == "Nationalist" then
+        return 0;
     end
 
     return 0;
-
 end
 
 function GetTaxCompanyConfidenceModifier(
@@ -4202,29 +4207,24 @@ function GetIdeologyCompanyConfidenceModifier(
         or "Social Democratic";
 
     if ideology == "Free Market" then
-
         return 2;
-
     elseif ideology == "Capitalist" then
-
         return 3;
-
     elseif ideology == "Social Democratic" then
-
         return 2;
-
     elseif ideology == "State Capitalist" then
-
         return 4;
-
     elseif ideology == "Socialist" then
-
         return 1;
-
+    elseif ideology == "Communist" then
+        return 0;
+    elseif ideology == "Fascist" then
+        return 3;
+    elseif ideology == "Nationalist" then
+        return 2;
     end
 
     return 0;
-
 end
 
 function CalculateStartingStockPrice(
@@ -4886,6 +4886,30 @@ if nation ~= nil then
 
         end
 
+    elseif ideology == "Communist" then
+
+        if nation.flagshipCompanyID == company.id then
+            score = score + 5;
+        else
+            score = score - 5;
+        end
+
+    elseif ideology == "Fascist" then
+
+        if nation.flagshipCompanyID == company.id then
+            score = score + 6;
+        elseif company.strategy == "Balanced" then
+            score = score + 2;
+        end
+
+    elseif ideology == "Nationalist" then
+
+        if nation.flagshipCompanyID == company.id then
+            score = score + 7;
+        elseif company.strategy == "Growth" then
+            score = score - 1;
+        end
+
     end
 
 end
@@ -5074,6 +5098,21 @@ end
         return;
     end
 
+    if nation.aiManagerEnabled == true then
+
+        spendableGold =
+            math.min(
+                spendableGold,
+                nation.aiManagerBudgetRemaining
+                or 0
+            );
+
+        if spendableGold <= 0 then
+            return;
+        end
+
+    end
+
     if strategicState == "recovery"
     or strategicState == "strained" then
 
@@ -5157,6 +5196,20 @@ end
         playerID,
         -totalCost
     );
+
+    if nation.aiManagerEnabled == true then
+
+        nation.aiManagerBudgetRemaining =
+            math.max(
+                0,
+                (
+                    nation.aiManagerBudgetRemaining
+                    or 0
+                )
+                - totalCost
+            );
+
+    end
 
     nation.stockHoldings[
         company.id
@@ -5577,17 +5630,29 @@ elseif ideology == "State Capitalist" then
 elseif ideology == "Socialist" then
 
     if company.strategy == "Dividend" then
-
-        score =
-            score
-            + 4;
-
+        score = score + 4;
     elseif company.strategy == "Growth" then
+        score = score - 3;
+    end
 
-        score =
-            score
-            - 3;
+elseif ideology == "Communist" then
 
+    if nation.flagshipCompanyID == company.id then
+        score = score + 6;
+    else
+        score = score - 4;
+    end
+
+elseif ideology == "Fascist" then
+
+    if nation.flagshipCompanyID == company.id then
+        score = score + 6;
+    end
+
+elseif ideology == "Nationalist" then
+
+    if nation.flagshipCompanyID == company.id then
+        score = score + 7;
     end
 
 end
@@ -7481,21 +7546,33 @@ function AIConsiderProjectCreation(
     end
 
 
+    local nation =
+        EnsureEconomyNation(
+            game,
+            data,
+            aiPlayerID
+        );
+
+    local managedHuman =
+        nation ~= nil
+        and nation.isAI ~= true
+        and nation.aiManagerEnabled == true;
+
+
     if AIHasOpenProject(
         data,
         aiPlayerID
     ) then
 
-
         return;
     end
 
 
-    if math.random(
-        1,
-        100
-    ) > GetAIProjectChance() then
-
+    if not managedHuman
+        and math.random(
+            1,
+            100
+        ) > GetAIProjectChance() then
 
         return;
     end
@@ -7514,13 +7591,6 @@ function AIConsiderProjectCreation(
         return;
     end
 
-
-local nation =
-    EnsureEconomyNation(
-        game,
-        data,
-        aiPlayerID
-    );
 
 local strategicState =
     nation.aiStrategicState
@@ -7559,6 +7629,18 @@ local reserve =
 local spendable =
     currentGold
     - reserve;
+
+if nation ~= nil
+    and nation.aiManagerEnabled == true then
+
+    spendable =
+        math.min(
+            spendable,
+            nation.aiManagerBudgetRemaining
+            or 0
+        );
+
+end
 
     if strategicState == "recovery"
     or strategicState == "strained"
@@ -7748,6 +7830,21 @@ end
         -creatorContribution
     );
 
+    if nation ~= nil
+        and nation.aiManagerEnabled == true then
+
+        nation.aiManagerBudgetRemaining =
+            math.max(
+                0,
+                (
+                    nation.aiManagerBudgetRemaining
+                    or 0
+                )
+                - creatorContribution
+            );
+
+    end
+
 
     local aiName =
         GetEconomicPlayerName(
@@ -7889,11 +7986,24 @@ function AIConsiderInvestment(
     end
 
 
-    if math.random(
-        1,
-        100
-    ) > GetAIInvestChance() then
+    local nation =
+        EnsureEconomyNation(
+            game,
+            data,
+            aiPlayerID
+        );
 
+    local managedHuman =
+        nation ~= nil
+        and nation.isAI ~= true
+        and nation.aiManagerEnabled == true;
+
+
+    if not managedHuman
+        and math.random(
+            1,
+            100
+        ) > GetAIInvestChance() then
 
         return;
     end
@@ -7912,13 +8022,6 @@ function AIConsiderInvestment(
         return;
     end
 
-
-local nation =
-    EnsureEconomyNation(
-        game,
-        data,
-        aiPlayerID
-    );
 
 local strategicState =
     nation.aiStrategicState
@@ -7957,6 +8060,18 @@ local reserve =
 local spendable =
     currentGold
     - reserve;
+
+if nation ~= nil
+    and nation.aiManagerEnabled == true then
+
+    spendable =
+        math.min(
+            spendable,
+            nation.aiManagerBudgetRemaining
+            or 0
+        );
+
+end
 
     if strategicState == "recovery"
     or strategicState == "strained"
@@ -8238,6 +8353,21 @@ end
         aiPlayerID,
         -amount
     );
+
+    if nation ~= nil
+        and nation.aiManagerEnabled == true then
+
+        nation.aiManagerBudgetRemaining =
+            math.max(
+                0,
+                (
+                    nation.aiManagerBudgetRemaining
+                    or 0
+                )
+                - amount
+            );
+
+    end
 
 
     if existing ~= nil then
@@ -14068,6 +14198,158 @@ end
 end
 
 end
+
+
+    -- =====================================================
+    -- HUMAN PLAYER AI MANAGER
+    -- =====================================================
+
+    if GetSetting(
+        "PlayerAIManagerEnabled",
+        true
+    ) == true then
+
+        local economy =
+            data.globalEconomy
+            or {};
+
+        for playerID, player
+            in pairs(
+                game.Game.Players
+            ) do
+
+            if player ~= nil
+                and player.IsAI ~= true
+                and IsPlayerAvailable(
+                    game,
+                    playerID
+                )
+                and IsNationEconomyReady(
+                    game,
+                    data,
+                    playerID
+                )
+            then
+
+                local nation =
+                    economy.nations
+                    and economy.nations[
+                        playerID
+                    ]
+                    or nil;
+
+                if nation ~= nil
+                    and nation.aiManagerEnabled == true then
+
+                    local currentTurn =
+                        economy.currentEconomyTurn
+                        or data.tradeTurn
+                        or 1;
+
+                    if nation.aiManagerCancelTurn ~= nil
+                        and currentTurn >= nation.aiManagerCancelTurn
+                    then
+
+                        nation.aiManagerEnabled =
+                            false;
+
+                        nation.aiManagerCancelTurn =
+                            nil;
+
+                        nation.aiManagerBudgetRemaining =
+                            0;
+
+                    else
+
+                        local managerBudget =
+                            math.max(
+                                25,
+                                math.floor(
+                                    nation.aiManagerBudget
+                                    or 100
+                                )
+                            );
+
+                        local availableGold =
+                            GetAvailableGold(
+                                game,
+                                resourceChanges,
+                                playerID
+                            );
+
+                        nation.aiManagerBudgetRemaining =
+                            math.max(
+                                0,
+                                math.min(
+                                    managerBudget,
+                                    availableGold
+                                )
+                            );
+
+                        nation.aiStrategicState =
+                            nation.aiStrategicState
+                            or "stable";
+
+                        nation.aiDynamicReservePercent =
+                            nation.aiDynamicReservePercent
+                            or GetSetting(
+                                "AIBaseReservePercent",
+                                40
+                            );
+
+                        local managerPhase =
+                            (
+                                data.tradeTurn
+                                + playerID
+                            )
+                            % 2;
+
+                        if managerPhase == 0 then
+
+                            ProcessAIMarketSelling(
+                                game,
+                                data,
+                                resourceChanges,
+                                playerID
+                            );
+
+                            ProcessAIMarketBuying(
+                                game,
+                                data,
+                                resourceChanges,
+                                playerID
+                            );
+
+                        else
+
+                            AIConsiderProjectCreation(
+                                game,
+                                data,
+                                playerID,
+                                resourceChanges
+                            );
+
+                            AIConsiderInvestment(
+                                game,
+                                data,
+                                playerID,
+                                resourceChanges
+                            );
+
+                        end
+
+                        nation.aiManagerLastProcessedTurn =
+                            currentTurn;
+
+                    end
+
+                end
+
+            end
+
+        end
+
+    end
 
 
     -- AI investment activity above may have caused

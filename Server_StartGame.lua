@@ -251,6 +251,26 @@ local function CreateDefaultNationState(
 
 
     -- =====================================================
+    -- PLAYER AI MANAGER
+    -- =====================================================
+
+    nation.aiManagerEnabled =
+        false;
+
+    nation.aiManagerBudget =
+        100;
+
+    nation.aiManagerBudgetRemaining =
+        0;
+
+    nation.aiManagerCancelTurn =
+        nil;
+
+    nation.aiManagerLastProcessedTurn =
+        0;
+
+
+    -- =====================================================
     -- NOTIFICATIONS / TURN REPORT
     -- =====================================================
 
@@ -270,7 +290,7 @@ local function CreateGlobalState()
     local data = {};
 
     data.version =
-        2;
+        3;
 
     data.initialized =
         true;
