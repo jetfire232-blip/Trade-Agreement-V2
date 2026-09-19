@@ -364,6 +364,51 @@ function Client_SaveConfigureUI(
 
 
     -- =====================================================
+    -- RESOURCES
+    -- =====================================================
+
+    local resourcesEnabled =
+        ReadBool(
+            "ResourcesEnabled"
+        );
+
+    local randomizedResourcePlacement =
+        ReadBool(
+            "RandomizedResourcePlacement"
+        );
+
+    local advancedResourcesEnabled =
+        ReadBool(
+            "AdvancedResourcesEnabled"
+        );
+
+    local resourceTradingEnabled =
+        ReadBool(
+            "ResourceTradingEnabled"
+        );
+
+    local resourceFacilityBaseCost =
+        ReadNumber(
+            "ResourceFacilityBaseCost"
+        );
+
+    local resourceFacilityMaxLevel =
+        ReadNumber(
+            "ResourceFacilityMaxLevel"
+        );
+
+    local resourceShortagePenaltyPercent =
+        ReadNumber(
+            "ResourceShortagePenaltyPercent"
+        );
+
+    local resourceUnrestEnabled =
+        ReadBool(
+            "ResourceUnrestEnabled"
+        );
+
+
+    -- =====================================================
     -- SMART AI
     -- =====================================================
 
@@ -803,6 +848,41 @@ function Client_SaveConfigureUI(
 
 
     -- =====================================================
+    -- VALIDATE RESOURCES
+    -- =====================================================
+
+    if not ValidateRange(
+        alert,
+        resourceFacilityBaseCost,
+        25,
+        1000,
+        "Resource Facility Base Cost must be between 25 and 1000 gold."
+    ) then
+        return;
+    end
+
+    if not ValidateRange(
+        alert,
+        resourceFacilityMaxLevel,
+        1,
+        5,
+        "Maximum Resource Facility Level must be between 1 and 5."
+    ) then
+        return;
+    end
+
+    if not ValidateRange(
+        alert,
+        resourceShortagePenaltyPercent,
+        0,
+        10,
+        "Resource Shortage Penalty must be between 0% and 10% per essential shortage."
+    ) then
+        return;
+    end
+
+
+    -- =====================================================
     -- VALIDATE SMART AI
     -- =====================================================
 
@@ -1035,6 +1115,35 @@ function Client_SaveConfigureUI(
 
     Mod.Settings.UNLeadershipEnabled =
         unLeadershipEnabled;
+
+
+    -- =====================================================
+    -- SAVE RESOURCES
+    -- =====================================================
+
+    Mod.Settings.ResourcesEnabled =
+        resourcesEnabled;
+
+    Mod.Settings.RandomizedResourcePlacement =
+        randomizedResourcePlacement;
+
+    Mod.Settings.AdvancedResourcesEnabled =
+        advancedResourcesEnabled;
+
+    Mod.Settings.ResourceTradingEnabled =
+        resourceTradingEnabled;
+
+    Mod.Settings.ResourceFacilityBaseCost =
+        resourceFacilityBaseCost;
+
+    Mod.Settings.ResourceFacilityMaxLevel =
+        resourceFacilityMaxLevel;
+
+    Mod.Settings.ResourceShortagePenaltyPercent =
+        resourceShortagePenaltyPercent;
+
+    Mod.Settings.ResourceUnrestEnabled =
+        resourceUnrestEnabled;
 
 
     -- =====================================================

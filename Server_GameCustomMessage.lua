@@ -2913,6 +2913,66 @@ end
 
 
 -- =========================================================
+-- STRATEGIC RESOURCE HELPERS
+-- =========================================================
+
+local RESOURCE_TYPES = {
+    ["Oil"] = true,
+    ["Gas"] = true,
+    ["Uranium"] = true,
+    ["Iron"] = true,
+    ["Food"] = true,
+    ["Rare Earths"] = true,
+    ["Coal"] = true,
+    ["Copper"] = true,
+    ["Lithium"] = true
+};
+
+local function EnsureResourceData(data)
+    if data.globalEconomy == nil then return nil; end
+    local economy = data.globalEconomy;
+    economy.resources = economy.resources or {
+        enabled = GetSetting("ResourcesEnabled", true),
+        advancedEnabled = GetSetting("AdvancedResourcesEnabled", true),
+        randomizedPlacement = GetSetting("RandomizedResourcePlacement", false),
+        territories = {}, pendingBuilds = {}, pendingOffers = {},
+        activeTrades = {}, tradeHistory = {}, nextOfferID = 1
+    };
+    local resources = economy.resources;
+    resources.territories = resources.territories or {};
+    resources.pendingBuilds = resources.pendingBuilds or {};
+    resources.pendingOffers = resources.pendingOffers or {};
+    resources.activeTrades = resources.activeTrades or {};
+    resources.tradeHistory = resources.tradeHistory or {};
+    resources.nextOfferID = resources.nextOfferID or 1;
+    return resources;
+end
+
+local function EnsureNationResourceFields(nation)
+    nation.resourceProduction = nation.resourceProduction or {};
+    nation.resourceEffective = nation.resourceEffective or {};
+    nation.resourceShortages = nation.resourceShortages or {};
+    nation.resourcePenaltyPercent = nation.resourcePenaltyPercent or 0;
+    nation.resourceMilitaryReadiness = nation.resourceMilitaryReadiness or 100;
+    nation.resourceUnrest = nation.resourceUnrest or 0;
+    nation.resourceBuildReservedGold = nation.resourceBuildReservedGold or 0;
+end
+
+local function IsAdvancedResource(resourceName)
+    return resourceName == "Coal"
+        or resourceName == "Copper"
+        or resourceName == "Lithium";
+end
+
+local function FindResourceOffer(resources, offerID)
+    for index, offer in ipairs(resources.pendingOffers or {}) do
+        if offer.id == offerID then return index, offer; end
+    end
+    return nil, nil;
+end
+
+
+-- =========================================================
 -- MAIN HOOK
 -- =========================================================
 
@@ -2940,6 +3000,11 @@ function Server_GameCustomMessage(
 
     local data =
         GetData();
+
+    local resourceData =
+        EnsureResourceData(
+            data
+        );
 
 
     -- =====================================================
@@ -10343,6 +10408,194 @@ end
         end
 
 
+        return;
+    end
+
+
+    -- =====================================================
+    -- RESOURCE FACILITY DEVELOPMENT
+    -- =====================================================
+
+    if payload.type == "buildResourceFacility" then
+
+        if resourceData == nil
+            or resourceData.enabled ~= true
+            or GetSetting("ResourcesEnabled", true) ~= true
+        then
+            setReturn({success=false, message="Strategic Resources are disabled by the host."});
+            return;
+        end
+
+        local resourceName = tostring(payload.resource or "");
+        local territoryID = MakeInteger(payload.territoryID);
+        if RESOURCE_TYPES[resourceName] ~= true or territoryID == nil then
+            setReturn({success=false, message="Invalid resource facility request."});
+            return;
+        end
+        if IsAdvancedResource(resourceName)
+            and GetSetting("AdvancedResourcesEnabled", true) ~= true
+        then
+            setReturn({success=false, message="Advanced resources are disabled by the host."});
+            return;
+        end
+
+        local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+        local terr = standing and standing.Territories and standing.Territories[territoryID];
+        if terr == nil or terr.OwnerPlayerID ~= playerID then
+            setReturn({success=false, message="You can only develop a resource facility on a territory you currently own."});
+            return;
+        end
+
+        local nodes = resourceData.territories[territoryID];
+        local currentLevel = nodes and nodes[resourceName] or 0;
+
+        local maxLevel = math.max(1, math.floor(tonumber(GetSetting("ResourceFacilityMaxLevel", 3)) or 3));
+        if currentLevel >= maxLevel then
+            setReturn({success=false, message=resourceName .. " facility is already at maximum level."});
+            return;
+        end
+
+        local newLevel = currentLevel + 1;
+        local baseCost = math.max(1, math.floor(tonumber(GetSetting("ResourceFacilityBaseCost", 100)) or 100));
+        local cost = currentLevel <= 0
+            and (baseCost * 3)
+            or (baseCost * newLevel);
+        local nation = EnsureNation(data, game, playerID);
+        EnsureNationResourceFields(nation);
+        local availableGold = GetStoredGold(game, playerID) - (nation.resourceBuildReservedGold or 0);
+        if availableGold < cost then
+            setReturn({success=false, message="You need " .. tostring(cost) .. " gold to upgrade this facility to level " .. tostring(newLevel) .. "."});
+            return;
+        end
+
+        nation.resourceBuildReservedGold = (nation.resourceBuildReservedGold or 0) + cost;
+        table.insert(resourceData.pendingBuilds, {
+            playerID = playerID,
+            territoryID = territoryID,
+            resource = resourceName,
+            fromLevel = currentLevel,
+            toLevel = newLevel,
+            cost = cost,
+            requestedTurn = data.tradeTurn or 0
+        });
+
+        Mod.PublicGameData = data;
+        local actionText = currentLevel <= 0 and "facility construction" or "facility upgrade";
+        setReturn({success=true, message=resourceName .. " " .. actionText .. " scheduled for next turn. Cost: " .. tostring(cost) .. " gold."});
+        return;
+    end
+
+
+    -- =====================================================
+    -- RESOURCE TRADE PROPOSAL
+    -- =====================================================
+
+    if payload.type == "proposeResourceTrade" then
+
+        if resourceData == nil
+            or resourceData.enabled ~= true
+            or GetSetting("ResourceTradingEnabled", true) ~= true
+        then
+            setReturn({success=false, message="Resource trading is disabled."});
+            return;
+        end
+
+        local targetPlayerID = MakeInteger(payload.targetPlayerID);
+        local resourceName = tostring(payload.resource or "");
+        local amount = math.max(1, math.min(10, MakeInteger(payload.amount) or 1));
+        local pricePerUnit = math.max(0, math.min(500, MakeInteger(payload.pricePerUnit) or 25));
+
+        if targetPlayerID == nil or targetPlayerID == playerID or not PlayerAvailable(game, targetPlayerID) then
+            setReturn({success=false, message="Invalid resource trade partner."});
+            return;
+        end
+        if RESOURCE_TYPES[resourceName] ~= true then
+            setReturn({success=false, message="Invalid resource type."});
+            return;
+        end
+        if IsAdvancedResource(resourceName)
+            and GetSetting("AdvancedResourcesEnabled", true) ~= true
+        then
+            setReturn({success=false, message="Advanced resources are disabled."});
+            return;
+        end
+
+        local nation = EnsureNation(data, game, playerID);
+        EnsureNationResourceFields(nation);
+        local production = nation.resourceProduction[resourceName] or 0;
+        if production < amount then
+            setReturn({success=false, message="Your current " .. resourceName .. " production is only " .. tostring(production) .. " per turn."});
+            return;
+        end
+
+        local id = resourceData.nextOfferID;
+        resourceData.nextOfferID = id + 1;
+        table.insert(resourceData.pendingOffers, {
+            id = id,
+            fromPlayerID = playerID,
+            toPlayerID = targetPlayerID,
+            resource = resourceName,
+            amount = amount,
+            pricePerUnit = pricePerUnit,
+            createdTurn = data.tradeTurn or 0
+        });
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="Resource trade offer sent."});
+        return;
+    end
+
+
+    if payload.type == "acceptResourceTrade" then
+        local offerID = MakeInteger(payload.offerID);
+        local index, offer = FindResourceOffer(resourceData or {}, offerID);
+        if offer == nil or offer.toPlayerID ~= playerID then
+            setReturn({success=false, message="Resource trade offer not found."});
+            return;
+        end
+        table.remove(resourceData.pendingOffers, index);
+        offer.acceptedTurn = data.tradeTurn or 0;
+        table.insert(resourceData.activeTrades, offer);
+        table.insert(resourceData.tradeHistory, {
+            turn = data.tradeTurn or 0,
+            type = "accepted",
+            fromPlayerID = offer.fromPlayerID,
+            toPlayerID = offer.toPlayerID,
+            resource = offer.resource,
+            amount = offer.amount,
+            pricePerUnit = offer.pricePerUnit
+        });
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="Resource trade contract activated."});
+        return;
+    end
+
+
+    if payload.type == "rejectResourceTrade" then
+        local offerID = MakeInteger(payload.offerID);
+        local index, offer = FindResourceOffer(resourceData or {}, offerID);
+        if offer == nil or offer.toPlayerID ~= playerID then
+            setReturn({success=false, message="Resource trade offer not found."});
+            return;
+        end
+        table.remove(resourceData.pendingOffers, index);
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="Resource trade offer rejected."});
+        return;
+    end
+
+
+    if payload.type == "cancelResourceTrade" then
+        local tradeIndex = MakeInteger(payload.tradeIndex);
+        local trade = tradeIndex and resourceData.activeTrades[tradeIndex] or nil;
+        if trade == nil
+            or (trade.fromPlayerID ~= playerID and trade.toPlayerID ~= playerID)
+        then
+            setReturn({success=false, message="Resource trade contract not found."});
+            return;
+        end
+        table.remove(resourceData.activeTrades, tradeIndex);
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="Resource trade contract canceled."});
         return;
     end
 

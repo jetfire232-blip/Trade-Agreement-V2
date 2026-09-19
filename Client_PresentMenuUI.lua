@@ -2936,6 +2936,274 @@ function ShowCustomizeTabs(
 end
 
 
+-- =========================================================
+-- STRATEGIC RESOURCES UI
+-- =========================================================
+
+local RESOURCE_UI_TYPES = {
+    "Oil", "Gas", "Uranium", "Iron", "Food", "Rare Earths",
+    "Coal", "Copper", "Lithium"
+};
+
+local function ResourceTypeAvailable(resourceName)
+    if resourceName == "Coal" or resourceName == "Copper" or resourceName == "Lithium" then
+        return GetClientSetting("AdvancedResourcesEnabled", true);
+    end
+    return true;
+end
+
+local function ResourceAmountText(values)
+    local parts = {};
+    for _, resourceName in ipairs(RESOURCE_UI_TYPES) do
+        if ResourceTypeAvailable(resourceName) then
+            table.insert(parts, resourceName .. ": " .. tostring((values or {})[resourceName] or 0));
+        end
+    end
+    return table.concat(parts, " | ");
+end
+
+function ShowResourcesMenu(parent, game)
+    local area = CreateContentArea(parent);
+    local data = Mod.PublicGameData or {};
+    local economy = data.globalEconomy or {};
+    local resources = economy.resources or {};
+    local nation = (economy.nations or {})[game.Us.ID] or {};
+
+    UI.CreateLabel(area).SetText("STRATEGIC RESOURCES");
+
+    if GetClientSetting("ResourcesEnabled", true) ~= true then
+        UI.CreateLabel(area).SetText("The host has disabled Strategic Resources.");
+        return;
+    end
+
+    UI.CreateLabel(area).SetText(
+        "Slot Profile: " .. tostring(nation.resourceProfile or "Not assigned") ..
+        " | Slot: " .. tostring(nation.resourceSlot or "-")
+    );
+
+    UI.CreateLabel(area).SetText("Production / Turn");
+    UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceProduction));
+    UI.CreateLabel(area).SetText("Effective After Trades");
+    UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceEffective));
+
+    local penalty = nation.resourcePenaltyPercent or 0;
+    local readiness = nation.resourceMilitaryReadiness or 100;
+    local unrest = nation.resourceUnrest or 0;
+    UI.CreateLabel(area).SetText(
+        "Resource Penalty: -" .. tostring(penalty) .. "% Commerce / mobilization" ..
+        " | Military Readiness: " .. tostring(readiness) .. "%" ..
+        " | Unrest: " .. tostring(unrest)
+    );
+
+    local shortages = nation.resourceShortages or {};
+    local shortageParts = {};
+    for resourceName, amount in pairs(shortages) do
+        table.insert(shortageParts, resourceName .. " -" .. tostring(amount));
+    end
+    table.sort(shortageParts);
+    UI.CreateLabel(area).SetText(
+        #shortageParts > 0 and ("Shortages: " .. table.concat(shortageParts, ", "))
+        or "Shortages: None"
+    );
+
+    UI.CreateLabel(area).SetText("----------------------------------------");
+    UI.CreateLabel(area).SetText("DEVELOP RESOURCE FACILITY");
+    UI.CreateLabel(area).SetText(
+        "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn and a structure icon remains visible on the map."
+    );
+
+    local selectedResource = "Oil";
+    local selectedLabel = UI.CreateLabel(area).SetText("Selected Resource: Oil");
+
+    local row = nil;
+    local visibleIndex = 0;
+    for _, resourceName in ipairs(RESOURCE_UI_TYPES) do
+        if ResourceTypeAvailable(resourceName) then
+            visibleIndex = visibleIndex + 1;
+            if (visibleIndex - 1) % 3 == 0 then row = UI.CreateHorizontalLayoutGroup(area); end
+            local captured = resourceName;
+            UI.CreateButton(row)
+                .SetText(captured)
+                .SetOnClick(function()
+                    selectedResource = captured;
+                    selectedLabel.SetText("Selected Resource: " .. captured);
+                end);
+        end
+    end
+
+    local territoryStatus = UI.CreateLabel(area).SetText("");
+    UI.CreateButton(area)
+        .SetText("SELECT TERRITORY TO UPGRADE")
+        .SetOnClick(function()
+            territoryStatus.SetText("Click one of your territories containing " .. selectedResource .. ".");
+            UI.InterceptNextTerritoryClick(function(terrDetails)
+                if terrDetails == nil then
+                    territoryStatus.SetText("Territory selection canceled.");
+                    return;
+                end
+                local territoryID = terrDetails.ID;
+                territoryStatus.SetText("Scheduling upgrade...");
+                game.SendGameCustomMessage(
+                    "Scheduling resource facility...",
+                    {type="buildResourceFacility", territoryID=territoryID, resource=selectedResource},
+                    function(result)
+                        if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
+                        ShowResourcesMenu(parent, game);
+                    end
+                );
+            end);
+        end);
+
+    if GetClientSetting("ResourceTradingEnabled", true) == true then
+        UI.CreateLabel(area).SetText("----------------------------------------");
+        UI.CreateLabel(area).SetText("RESOURCE TRADE CONTRACTS");
+        UI.CreateLabel(area).SetText("Contracts transfer current-turn production every turn; resources are not stockpiled.");
+
+        local tradeResource = "Oil";
+        local tradeAmount = 1;
+        local tradePrice = 25;
+        local targetPlayerID = nil;
+        local tradeLabel = UI.CreateLabel(area).SetText("Offer: 1 Oil @ 25 gold/unit | Partner: None");
+
+        local function RefreshTradeLabel()
+            local targetName = targetPlayerID and GetPlayerName(game, targetPlayerID) or "None";
+            tradeLabel.SetText(
+                "Offer: " .. tostring(tradeAmount) .. " " .. tradeResource ..
+                " @ " .. tostring(tradePrice) .. " gold/unit | Partner: " .. targetName
+            );
+        end
+
+        local rrow = nil;
+        local resourceButtonIndex = 0;
+        for _, resourceName in ipairs({"Oil","Gas","Iron","Food","Uranium","Rare Earths"}) do
+            if ResourceTypeAvailable(resourceName) then
+                resourceButtonIndex = resourceButtonIndex + 1;
+                if (resourceButtonIndex - 1) % 3 == 0 then
+                    rrow = UI.CreateHorizontalLayoutGroup(area);
+                end
+                local captured = resourceName;
+                UI.CreateButton(rrow).SetText(captured).SetOnClick(function()
+                    tradeResource = captured; RefreshTradeLabel();
+                end);
+            end
+        end
+
+        local amountRow = UI.CreateHorizontalLayoutGroup(area);
+        UI.CreateButton(amountRow).SetText("-1 UNIT").SetOnClick(function()
+            tradeAmount = math.max(1, tradeAmount - 1); RefreshTradeLabel();
+        end);
+        UI.CreateButton(amountRow).SetText("+1 UNIT").SetOnClick(function()
+            tradeAmount = math.min(10, tradeAmount + 1); RefreshTradeLabel();
+        end);
+        UI.CreateButton(amountRow).SetText("-5 GOLD").SetOnClick(function()
+            tradePrice = math.max(0, tradePrice - 5); RefreshTradeLabel();
+        end);
+        UI.CreateButton(amountRow).SetText("+5 GOLD").SetOnClick(function()
+            tradePrice = math.min(500, tradePrice + 5); RefreshTradeLabel();
+        end);
+
+        UI.CreateLabel(area).SetText("Search Trade Partner");
+        local searchInput = UI.CreateTextInputField(area);
+        local searchHost = UI.CreateVerticalLayoutGroup(area);
+
+        local function RefreshResourcePartnerSearch()
+            if not UI.IsDestroyed(searchHost) then UI.Destroy(searchHost); end
+            searchHost = UI.CreateVerticalLayoutGroup(area);
+            local query = string.lower(searchInput.GetText() or "");
+            local matches = {};
+            for playerID, player in pairs(game.Game.Players or {}) do
+                if playerID ~= game.Us.ID and not player.Surrendered then
+                    local name = GetPlayerName(game, playerID);
+                    if query == "" or string.find(string.lower(name), query, 1, true) ~= nil then
+                        table.insert(matches, {id=playerID, name=name});
+                    end
+                end
+            end
+            table.sort(matches, function(a,b) return a.name < b.name; end);
+            local prow = nil;
+            for index, item in ipairs(matches) do
+                if index > 30 then break; end
+                if (index - 1) % 3 == 0 then prow = UI.CreateHorizontalLayoutGroup(searchHost); end
+                local capturedID = item.id;
+                UI.CreateButton(prow)
+                    .SetText(item.name)
+                    .SetTextColor(GetPlayerUIColor(game, item.id, "#FFFFFF"))
+                    .SetOnClick(function()
+                        targetPlayerID = capturedID;
+                        RefreshTradeLabel();
+                    end);
+            end
+        end
+
+        searchInput.SetOnValueChanged(function() RefreshResourcePartnerSearch(); end);
+        RefreshResourcePartnerSearch();
+
+        UI.CreateButton(area).SetText("SEND RESOURCE OFFER").SetOnClick(function()
+            if targetPlayerID == nil then UI.Alert("Select a trade partner first."); return; end
+            game.SendGameCustomMessage(
+                "Sending resource trade offer...",
+                {type="proposeResourceTrade", targetPlayerID=targetPlayerID, resource=tradeResource, amount=tradeAmount, pricePerUnit=tradePrice},
+                function(result)
+                    if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
+                    ShowResourcesMenu(parent, game);
+                end
+            );
+        end);
+
+        UI.CreateLabel(area).SetText("INCOMING OFFERS");
+        local foundIncoming = false;
+        for _, offer in ipairs(resources.pendingOffers or {}) do
+            if offer.toPlayerID == game.Us.ID then
+                foundIncoming = true;
+                local offerID = offer.id;
+                local offerRow = UI.CreateHorizontalLayoutGroup(area);
+                UI.CreateLabel(offerRow).SetText(
+                    GetPlayerName(game, offer.fromPlayerID) .. ": " .. tostring(offer.amount) .. " " .. offer.resource ..
+                    " @ " .. tostring(offer.pricePerUnit) .. " gold/unit"
+                );
+                UI.CreateButton(offerRow).SetText("ACCEPT").SetOnClick(function()
+                    game.SendGameCustomMessage("Accepting resource trade...", {type="acceptResourceTrade", offerID=offerID}, function(result)
+                        if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
+                        ShowResourcesMenu(parent, game);
+                    end);
+                end);
+                UI.CreateButton(offerRow).SetText("REJECT").SetOnClick(function()
+                    game.SendGameCustomMessage("Rejecting resource trade...", {type="rejectResourceTrade", offerID=offerID}, function(result)
+                        if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
+                        ShowResourcesMenu(parent, game);
+                    end);
+                end);
+            end
+        end
+        if not foundIncoming then UI.CreateLabel(area).SetText("No incoming resource offers."); end
+
+        UI.CreateLabel(area).SetText("ACTIVE CONTRACTS");
+        local foundActive = false;
+        for tradeIndex, trade in ipairs(resources.activeTrades or {}) do
+            if trade.fromPlayerID == game.Us.ID or trade.toPlayerID == game.Us.ID then
+                foundActive = true;
+                local capturedIndex = tradeIndex;
+                local direction = trade.fromPlayerID == game.Us.ID and "EXPORT" or "IMPORT";
+                local otherID = trade.fromPlayerID == game.Us.ID and trade.toPlayerID or trade.fromPlayerID;
+                local activeRow = UI.CreateHorizontalLayoutGroup(area);
+                UI.CreateLabel(activeRow).SetText(
+                    direction .. " " .. tostring(trade.amount) .. " " .. trade.resource ..
+                    " with " .. GetPlayerName(game, otherID) .. " @ " .. tostring(trade.pricePerUnit) ..
+                    " | Last delivered: " .. tostring(trade.lastTransferred or 0)
+                );
+                UI.CreateButton(activeRow).SetText("CANCEL").SetOnClick(function()
+                    game.SendGameCustomMessage("Canceling resource contract...", {type="cancelResourceTrade", tradeIndex=capturedIndex}, function(result)
+                        if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
+                        ShowResourcesMenu(parent, game);
+                    end);
+                end);
+            end
+        end
+        if not foundActive then UI.CreateLabel(area).SetText("No active resource contracts."); end
+    end
+end
+
+
 function BuildMainTabs(
     tabsHost,
     contentHost,
@@ -3045,6 +3313,24 @@ function BuildMainTabs(
             "#FFFFFF",
             function()
                 ShowTaxationMenu(contentHost, game);
+            end
+        );
+    end
+
+    if GetClientSetting(
+        "ResourcesEnabled",
+        true
+    ) then
+        QueueTab(
+            "resources",
+            "Resources",
+            "#2E8B57",
+            "#FFFFFF",
+            function()
+                ShowResourcesMenu(
+                    contentHost,
+                    game
+                );
             end
         );
     end

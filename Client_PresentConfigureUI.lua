@@ -535,6 +535,67 @@ function Client_PresentConfigureUI(rootParent)
 
 
     -- =====================================================
+    -- RESOURCE SYSTEM SETTINGS
+    -- =====================================================
+
+    local resourcesEnabled =
+        GetBoolSetting(
+            settings,
+            "ResourcesEnabled",
+            true
+        );
+
+    local randomizedResourcePlacement =
+        GetBoolSetting(
+            settings,
+            "RandomizedResourcePlacement",
+            false
+        );
+
+    local advancedResourcesEnabled =
+        GetBoolSetting(
+            settings,
+            "AdvancedResourcesEnabled",
+            true
+        );
+
+    local resourceTradingEnabled =
+        GetBoolSetting(
+            settings,
+            "ResourceTradingEnabled",
+            true
+        );
+
+    local resourceFacilityBaseCost =
+        GetNumberSetting(
+            settings,
+            "ResourceFacilityBaseCost",
+            100
+        );
+
+    local resourceFacilityMaxLevel =
+        GetNumberSetting(
+            settings,
+            "ResourceFacilityMaxLevel",
+            3
+        );
+
+    local resourceShortagePenaltyPercent =
+        GetNumberSetting(
+            settings,
+            "ResourceShortagePenaltyPercent",
+            3
+        );
+
+    local resourceUnrestEnabled =
+        GetBoolSetting(
+            settings,
+            "ResourceUnrestEnabled",
+            true
+        );
+
+
+    -- =====================================================
     -- SMART AI SETTINGS
     -- =====================================================
 
@@ -1251,6 +1312,78 @@ function Client_PresentConfigureUI(rootParent)
         "AITaxManagementEnabled",
         "Allow Smart AI to dynamically manage taxation",
         aiTaxManagementEnabled
+    );
+
+
+    AddSection(
+        root,
+        "STRATEGIC RESOURCES",
+        "Territory resources produce each turn, can be traded between nations, and influence Commerce / military mobilization. Realistic mode assigns resource strengths from the nation slot profile; randomized mode keeps the same strengths but randomizes which owned territories receive them."
+    );
+
+    AddCheckBox(
+        root,
+        "ResourcesEnabled",
+        "Enable Strategic Resources",
+        resourcesEnabled
+    );
+
+    AddCheckBox(
+        root,
+        "RandomizedResourcePlacement",
+        "Randomize resource territory placement",
+        randomizedResourcePlacement
+    );
+
+    AddCheckBox(
+        root,
+        "AdvancedResourcesEnabled",
+        "Enable advanced resources (Coal, Copper, Lithium)",
+        advancedResourcesEnabled
+    );
+
+    AddCheckBox(
+        root,
+        "ResourceTradingEnabled",
+        "Allow direct recurring resource trade contracts",
+        resourceTradingEnabled
+    );
+
+    AddNumberInput(
+        root,
+        "ResourceFacilityBaseCost",
+        "Base Resource Facility Cost (gold)",
+        resourceFacilityBaseCost,
+        25,
+        1000,
+        "Developing an existing resource deposit costs this amount multiplied by the new facility level."
+    );
+
+    AddNumberInput(
+        root,
+        "ResourceFacilityMaxLevel",
+        "Maximum Facility Level",
+        resourceFacilityMaxLevel,
+        1,
+        5,
+        "Higher facility levels produce more units per turn and display a larger structure count on the territory."
+    );
+
+    AddNumberInput(
+        root,
+        "ResourceShortagePenaltyPercent",
+        "Shortage Penalty per Essential Resource (%)",
+        resourceShortagePenaltyPercent,
+        0,
+        10,
+        "Oil, Food, Iron and Gas shortages reduce usable Commerce and therefore military spending power. Total resource penalty is capped for performance and balance."
+    );
+
+    AddCheckBox(
+        root,
+        "ResourceUnrestEnabled",
+        "Allow sustained shortages to create national unrest",
+        resourceUnrestEnabled
     );
 
 

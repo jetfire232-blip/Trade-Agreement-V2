@@ -13961,6 +13961,224 @@ function GetAIBestDefenseTerritory(
 end
 
 -- =========================================================
+-- STRATEGIC RESOURCES
+-- =========================================================
+
+local RESOURCE_NAMES = {
+    "Oil", "Gas", "Uranium", "Iron", "Food", "Rare Earths",
+    "Coal", "Copper", "Lithium"
+};
+
+local RESOURCE_STRUCTURE = {
+    ["Oil"] = WL.StructureType.Power,
+    ["Gas"] = WL.StructureType.Smelter,
+    ["Uranium"] = WL.StructureType.Draft,
+    ["Iron"] = WL.StructureType.Mine,
+    ["Food"] = WL.StructureType.ArmyCamp,
+    ["Rare Earths"] = WL.StructureType.DigSite,
+    ["Coal"] = WL.StructureType.ResourceCache,
+    ["Copper"] = WL.StructureType.Market,
+    ["Lithium"] = WL.StructureType.Recipe
+};
+
+local function EnsureStrategicResourceState(data)
+    local economy = data.globalEconomy;
+    if economy == nil then return nil; end
+    economy.resources = economy.resources or {
+        enabled = GetSetting("ResourcesEnabled", true),
+        advancedEnabled = GetSetting("AdvancedResourcesEnabled", true),
+        randomizedPlacement = GetSetting("RandomizedResourcePlacement", false),
+        territories = {}, pendingBuilds = {}, pendingOffers = {},
+        activeTrades = {}, tradeHistory = {}, nextOfferID = 1
+    };
+    local r = economy.resources;
+    r.territories = r.territories or {};
+    r.pendingBuilds = r.pendingBuilds or {};
+    r.pendingOffers = r.pendingOffers or {};
+    r.activeTrades = r.activeTrades or {};
+    r.tradeHistory = r.tradeHistory or {};
+    r.nextOfferID = r.nextOfferID or 1;
+    return r;
+end
+
+local function EnsureNationResourceState(nation)
+    nation.resourceProduction = nation.resourceProduction or {};
+    nation.resourceEffective = nation.resourceEffective or {};
+    nation.resourceShortages = nation.resourceShortages or {};
+    nation.resourcePenaltyPercent = nation.resourcePenaltyPercent or 0;
+    nation.resourceMilitaryReadiness = nation.resourceMilitaryReadiness or 100;
+    nation.resourceUnrest = nation.resourceUnrest or 0;
+    nation.resourceBuildReservedGold = nation.resourceBuildReservedGold or 0;
+end
+
+local function EmptyResourceTable()
+    local t = {};
+    for _, resourceName in ipairs(RESOURCE_NAMES) do t[resourceName] = 0; end
+    return t;
+end
+
+local function ProcessPendingResourceBuilds(game, data, resourceChanges, addNewOrder)
+    local resources = EnsureStrategicResourceState(data);
+    if resources == nil or resources.enabled ~= true then return; end
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing == nil or standing.Territories == nil then return; end
+
+    local remaining = {};
+    for _, build in ipairs(resources.pendingBuilds or {}) do
+        local nation = data.globalEconomy.nations[build.playerID];
+        if nation ~= nil then EnsureNationResourceState(nation); end
+        local terr = standing.Territories[build.territoryID];
+        local nodes = resources.territories[build.territoryID];
+        local currentLevel = nodes and nodes[build.resource] or 0;
+
+        if nation ~= nil
+            and terr ~= nil
+            and terr.OwnerPlayerID == build.playerID
+            and currentLevel == build.fromLevel
+        then
+            resources.territories[build.territoryID] = nodes or {};
+            nodes = resources.territories[build.territoryID];
+            nodes[build.resource] = build.toLevel;
+            local terrMod = WL.TerritoryModification.Create(build.territoryID);
+            terrMod.AddStructuresOpt = {
+                [RESOURCE_STRUCTURE[build.resource]] = 1
+            };
+            local event = WL.GameOrderEvent.Create(
+                build.playerID,
+                build.resource .. " facility upgraded to level " .. tostring(build.toLevel),
+                {}, {terrMod}, nil, nil
+            );
+            addNewOrder(event);
+            AddResourceChange(resourceChanges, build.playerID, -(build.cost or 0));
+            nation.resourceBuildReservedGold = math.max(0, (nation.resourceBuildReservedGold or 0) - (build.cost or 0));
+        else
+            if nation ~= nil then
+                nation.resourceBuildReservedGold = math.max(0, (nation.resourceBuildReservedGold or 0) - (build.cost or 0));
+            end
+        end
+    end
+    resources.pendingBuilds = remaining;
+end
+
+local function ProcessStrategicResources(game, data, resourceChanges)
+    local resources = EnsureStrategicResourceState(data);
+    local economy = data.globalEconomy;
+    if resources == nil or resources.enabled ~= true or economy == nil then return; end
+
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing == nil or standing.Territories == nil then return; end
+
+    for playerID, nation in pairs(economy.nations or {}) do
+        EnsureNationResourceState(nation);
+        nation.resourceProduction = EmptyResourceTable();
+        nation.resourceEffective = EmptyResourceTable();
+        nation.resourceShortages = {};
+    end
+
+    -- Performance-safe: iterate only cached resource territories, not the whole map.
+    for territoryID, nodes in pairs(resources.territories or {}) do
+        local terr = standing.Territories[territoryID];
+        local owner = terr and terr.OwnerPlayerID or nil;
+        local nation = owner and economy.nations[owner] or nil;
+        if nation ~= nil and nation.eliminated ~= true then
+            for resourceName, level in pairs(nodes) do
+                nation.resourceProduction[resourceName] =
+                    (nation.resourceProduction[resourceName] or 0) + (tonumber(level) or 0);
+            end
+        end
+    end
+
+    for _, nation in pairs(economy.nations or {}) do
+        for _, resourceName in ipairs(RESOURCE_NAMES) do
+            nation.resourceEffective[resourceName] = nation.resourceProduction[resourceName] or 0;
+        end
+    end
+
+    -- Recurring resource contracts.  No stockpile: resources are transferred from current turn production.
+    local goldRemaining = {};
+    for playerID, nation in pairs(economy.nations or {}) do
+        goldRemaining[playerID] = math.max(0, GetStoredGold(game, playerID));
+    end
+
+    local activeTrades = {};
+    for _, trade in ipairs(resources.activeTrades or {}) do
+        local seller = economy.nations[trade.fromPlayerID];
+        local buyer = economy.nations[trade.toPlayerID];
+        if seller ~= nil and buyer ~= nil
+            and seller.eliminated ~= true and buyer.eliminated ~= true
+        then
+            local available = seller.resourceEffective[trade.resource] or 0;
+            local desired = math.max(0, tonumber(trade.amount) or 0);
+            local price = math.max(0, tonumber(trade.pricePerUnit) or 0);
+            local affordable = desired;
+            if price > 0 then
+                affordable = math.floor((goldRemaining[trade.toPlayerID] or 0) / price);
+            end
+            local transferred = math.min(available, desired, affordable);
+            if transferred > 0 then
+                seller.resourceEffective[trade.resource] = available - transferred;
+                buyer.resourceEffective[trade.resource] = (buyer.resourceEffective[trade.resource] or 0) + transferred;
+                local payment = transferred * price;
+                if payment > 0 then
+                    AddResourceChange(resourceChanges, trade.fromPlayerID, payment);
+                    AddResourceChange(resourceChanges, trade.toPlayerID, -payment);
+                    goldRemaining[trade.toPlayerID] = math.max(0, (goldRemaining[trade.toPlayerID] or 0) - payment);
+                end
+                trade.lastTransferred = transferred;
+                trade.lastProcessedTurn = data.tradeTurn or 0;
+            else
+                trade.lastTransferred = 0;
+                trade.lastProcessedTurn = data.tradeTurn or 0;
+            end
+            table.insert(activeTrades, trade);
+        end
+    end
+    resources.activeTrades = activeTrades;
+
+    local penaltyPerShortage = math.max(0, tonumber(GetSetting("ResourceShortagePenaltyPercent", 3)) or 3);
+    local unrestEnabled = GetSetting("ResourceUnrestEnabled", true) == true;
+
+    for playerID, nation in pairs(economy.nations or {}) do
+        if nation.eliminated ~= true then
+            local commerce = math.max(1, GetCommerceIncome(game, playerID));
+            local demands = {
+                Oil = math.max(1, math.ceil(commerce / 500)),
+                Food = math.max(1, math.ceil(commerce / 450)),
+                Iron = math.max(1, math.ceil(commerce / 800)),
+                Gas = math.max(0, math.ceil(commerce / 1000) - 1)
+            };
+            local shortageCount = 0;
+            for resourceName, demand in pairs(demands) do
+                local have = nation.resourceEffective[resourceName] or 0;
+                if have < demand then
+                    shortageCount = shortageCount + 1;
+                    nation.resourceShortages[resourceName] = demand - have;
+                end
+            end
+            local penaltyPercent = math.min(15, shortageCount * penaltyPerShortage);
+            nation.resourcePenaltyPercent = penaltyPercent;
+            nation.resourceMilitaryReadiness = math.max(50, 100 - (shortageCount * 10));
+
+            if unrestEnabled then
+                if shortageCount > 0 then
+                    nation.resourceUnrest = math.min(100, (nation.resourceUnrest or 0) + shortageCount * 2);
+                else
+                    nation.resourceUnrest = math.max(0, (nation.resourceUnrest or 0) - 2);
+                end
+            end
+
+            if penaltyPercent > 0 then
+                local penaltyGold = math.floor((commerce * penaltyPercent / 100) + 0.5);
+                if penaltyGold > 0 then
+                    AddResourceChange(resourceChanges, playerID, -penaltyGold);
+                end
+            end
+        end
+    end
+end
+
+
+-- =========================================================
 -- MAIN TURN HOOK
 -- =========================================================
 
@@ -13990,6 +14208,24 @@ function Server_AdvanceTurn_Start(
 
     local resourceChanges =
         {};
+
+
+    -- =====================================================
+    -- STRATEGIC RESOURCES
+    -- =====================================================
+
+    ProcessPendingResourceBuilds(
+        game,
+        data,
+        resourceChanges,
+        addNewOrder
+    );
+
+    ProcessStrategicResources(
+        game,
+        data,
+        resourceChanges
+    );
 
 
     -- =====================================================
