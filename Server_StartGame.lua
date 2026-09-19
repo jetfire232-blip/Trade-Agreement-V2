@@ -40,6 +40,38 @@ local function IsAIPlayer(player)
 end
 
 
+local function CreateResourceState()
+
+    return
+        {
+            enabled =
+                GetSetting(
+                    "ResourcesEnabled",
+                    true
+                ),
+
+            advancedEnabled =
+                GetSetting(
+                    "AdvancedResourcesEnabled",
+                    true
+                ),
+
+            randomizedPlacement =
+                GetSetting(
+                    "RandomizedResourcePlacement",
+                    false
+                ),
+
+            territories = {},
+            pendingBuilds = {},
+            pendingOffers = {},
+            activeTrades = {},
+            tradeHistory = {},
+            nextOfferID = 1
+        };
+end
+
+
 local function CreateDefaultNationState(
     playerID,
     player,
@@ -211,39 +243,6 @@ local function CreateDefaultNationState(
 
     nation.creditScore =
         50;
-
-
-    -- =====================================================
-    -- STRATEGIC RESOURCES
-    -- =====================================================
-
-    data.resources =
-        {
-            enabled =
-                GetSetting(
-                    "ResourcesEnabled",
-                    true
-                ),
-
-            advancedEnabled =
-                GetSetting(
-                    "AdvancedResourcesEnabled",
-                    true
-                ),
-
-            randomizedPlacement =
-                GetSetting(
-                    "RandomizedResourcePlacement",
-                    false
-                ),
-
-            territories = {},
-            pendingBuilds = {},
-            pendingOffers = {},
-            activeTrades = {},
-            tradeHistory = {},
-            nextOfferID = 1
-        };
 
 
     -- =====================================================
@@ -481,6 +480,14 @@ local function CreateGlobalState()
                     true
                 )
         };
+
+
+    -- =====================================================
+    -- STRATEGIC RESOURCES
+    -- =====================================================
+
+    data.resources =
+        CreateResourceState();
 
 
     -- =====================================================
@@ -751,6 +758,14 @@ function Server_StartGame(
 
     local economy =
         data.globalEconomy;
+
+
+    -- Support both brand-new games and games created from
+    -- an older V3 data shape that did not yet contain resources.
+    if economy.resources == nil then
+        economy.resources =
+            CreateResourceState();
+    end
 
 
     -- =====================================================
