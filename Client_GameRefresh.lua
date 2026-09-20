@@ -592,7 +592,7 @@ end
         data.globalEconomy;
 
 
-    -- Wait until the server has initialized V2 data.
+    -- Wait until the server has initialized Global Affairs data.
 
     if economy == nil
         or economy.initialized ~= true then

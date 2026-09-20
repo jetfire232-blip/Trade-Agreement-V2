@@ -3918,55 +3918,32 @@ end
 -- =========================================================
 -- COMMERCE INCOME
 -- =========================================================
+-- Cache Income() once per player per advance turn. Several AI systems ask for
+-- the same value repeatedly, which becomes expensive in large/Mega Games.
 
-function GetCommerceIncome(
-    game,
-    playerID
-)
+local TURN_COMMERCE_INCOME_CACHE = {};
 
-    local player =
-        GetEconomicPlayer(
-            game,
-            playerID
-        );
+function GetCommerceIncome(game, playerID)
+    if TURN_COMMERCE_INCOME_CACHE[playerID] ~= nil then
+        return TURN_COMMERCE_INCOME_CACHE[playerID];
+    end
 
-
+    local player = GetEconomicPlayer(game, playerID);
     if player == nil then
-
+        TURN_COMMERCE_INCOME_CACHE[playerID] = 0;
         return 0;
     end
 
-
-    local standing =
-        game.ServerGame
-            .LatestTurnStanding;
-
-
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
     if standing == nil then
-
+        TURN_COMMERCE_INCOME_CACHE[playerID] = 0;
         return 0;
     end
 
-
-    local info =
-        player.Income(
-            0,
-            standing,
-            true,
-            false
-        );
-
-
-    if info == nil then
-
-        return 0;
-    end
-
-
-    return
-        info.Total
-        or 0;
-
+    local info = player.Income(0, standing, true, false);
+    local total = info ~= nil and (info.Total or 0) or 0;
+    TURN_COMMERCE_INCOME_CACHE[playerID] = total;
+    return total;
 end
 
 function GetTaxCommerceModifierPercent(
@@ -4482,28 +4459,22 @@ end
 -- STORED GOLD / RESOURCE CHANGES
 -- =========================================================
 
-function GetStoredGold(
-    game,
-    playerID
-)
+local TURN_STORED_GOLD_CACHE = {};
 
-    if game.ServerGame == nil
-        or game.ServerGame
-            .LatestTurnStanding
-            == nil then
+function GetStoredGold(game, playerID)
+    if TURN_STORED_GOLD_CACHE[playerID] ~= nil then
+        return TURN_STORED_GOLD_CACHE[playerID];
+    end
 
-
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing == nil then
+        TURN_STORED_GOLD_CACHE[playerID] = 0;
         return 0;
     end
 
-
-    return game.ServerGame
-        .LatestTurnStanding
-        .NumResources(
-            playerID,
-            WL.ResourceType.Gold
-        );
-
+    local gold = standing.NumResources(playerID, WL.ResourceType.Gold) or 0;
+    TURN_STORED_GOLD_CACHE[playerID] = gold;
+    return gold;
 end
 
 
@@ -12563,6 +12534,130 @@ end
 
 
 -- =========================================================
+-- TURN PERFORMANCE CACHE / LARGE-GAME SCHEDULING
+-- =========================================================
+-- Mega Games can have 100+ players. Build one map/diplomacy snapshot per turn
+-- and stagger non-urgent AI reviews rather than repeating full scans per AI.
+
+local ADVANCE_TURN_PERFORMANCE_CACHE = nil;
+local ADVANCE_TURN_ORDER_DATA_CACHE = nil;
+local ADVANCE_TURN_BORDER_CACHE = {};
+
+local function BuildAdvanceTurnPerformanceCache(game, data)
+    local turn = data and data.tradeTurn or 0;
+    if ADVANCE_TURN_PERFORMANCE_CACHE ~= nil
+        and ADVANCE_TURN_PERFORMANCE_CACHE.turn == turn
+    then
+        return ADVANCE_TURN_PERFORMANCE_CACHE;
+    end
+
+    local cache = {
+        turn = turn,
+        playerCount = 0,
+        ownedTerritories = {},
+        atWar = {},
+        playerThreat = {},
+        territoryThreat = {},
+        warPairs = {}
+    };
+
+    for playerID, player in pairs(game.Game.Players or {}) do
+        if player ~= nil and not player.Surrendered then
+            cache.playerCount = cache.playerCount + 1;
+            cache.ownedTerritories[playerID] = {};
+        end
+    end
+
+    local diplomacy = GetDiplomacyData(data);
+    for _, relationship in pairs(diplomacy.relationships or {}) do
+        if relationship ~= nil
+            and relationship.status == "war"
+            and relationship.player1 ~= nil
+            and relationship.player2 ~= nil
+        then
+            local p1 = relationship.player1;
+            local p2 = relationship.player2;
+            cache.atWar[p1] = true;
+            cache.atWar[p2] = true;
+            cache.warPairs[EconomyPairKey(p1, p2)] = true;
+        end
+    end
+
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing ~= nil and standing.Territories ~= nil then
+        for territoryID, territoryStanding in pairs(standing.Territories) do
+            local owner = territoryStanding and territoryStanding.OwnerPlayerID or nil;
+            if owner ~= nil and cache.ownedTerritories[owner] ~= nil then
+                table.insert(cache.ownedTerritories[owner], territoryID);
+            end
+        end
+
+        -- One map pass calculates enough local threat information for reserve
+        -- planning and city placement. This replaces a full-map defense scan
+        -- for every AI nation.
+        for territoryID, territoryStanding in pairs(standing.Territories) do
+            local owner = territoryStanding and territoryStanding.OwnerPlayerID or nil;
+            local details = game.Map and game.Map.Territories and game.Map.Territories[territoryID] or nil;
+            if owner ~= nil and details ~= nil and cache.ownedTerritories[owner] ~= nil then
+                local threat = 0;
+                for connectedID, _ in pairs(details.ConnectedTo or {}) do
+                    local connected = standing.Territories[connectedID];
+                    local otherOwner = connected and connected.OwnerPlayerID or nil;
+                    if otherOwner ~= nil
+                        and otherOwner ~= owner
+                        and otherOwner ~= WL.PlayerID.Neutral
+                        and cache.warPairs[EconomyPairKey(owner, otherOwner)] == true
+                    then
+                        local armies = connected.NumArmies and connected.NumArmies.NumArmies or 0;
+                        threat = threat + math.floor(armies * 0.50) + 4;
+                    end
+                end
+                cache.territoryThreat[territoryID] = threat;
+                cache.playerThreat[owner] = math.max(cache.playerThreat[owner] or 0, threat);
+            end
+        end
+    end
+
+    ADVANCE_TURN_PERFORMANCE_CACHE = cache;
+    return cache;
+end
+
+local function GetPerformanceCadence(game, data, workType)
+    local count = BuildAdvanceTurnPerformanceCache(game, data).playerCount or 0;
+
+    if count >= 100 then
+        if workType == "diplomacy" then return 4; end
+        if workType == "trade" then return 4; end
+        if workType == "city" then return 4; end
+        if workType == "economy" then return 2; end
+    elseif count >= 50 then
+        if workType == "diplomacy" then return 2; end
+        if workType == "trade" then return 2; end
+        if workType == "city" then return 2; end
+    elseif count >= 25 then
+        if workType == "diplomacy" then return 2; end
+        if workType == "trade" then return 2; end
+        if workType == "city" then return 2; end
+    end
+
+    return 1;
+end
+
+local function ShouldRunAIWork(data, playerID, cadence)
+    cadence = math.max(1, cadence or 1);
+    if cadence <= 1 then return true; end
+    local id = math.abs(tonumber(playerID) or 0);
+    return (((data.tradeTurn or 0) + id) % cadence) == 0;
+end
+
+local function GetStaggeredAIPhase(data, playerID, cadence, phaseCount)
+    cadence = math.max(1, cadence or 1);
+    phaseCount = math.max(1, phaseCount or 1);
+    local id = math.abs(tonumber(playerID) or 0);
+    return math.floor(((data.tradeTurn or 0) + id) / cadence) % phaseCount;
+end
+
+-- =========================================================
 -- AI DIPLOMACY TURN
 -- =========================================================
 
@@ -12594,8 +12689,11 @@ ProcessAIIncomingFactionInvites(
     game,
     data
 );
-    -- Then allow each active AI nation to make
-    -- one set of strategic diplomacy decisions.
+    -- Then allow each active AI nation to make strategic diplomacy decisions.
+    -- Incoming offers above still resolve every turn; only proactive reviews
+    -- are staggered in larger games.
+
+    local diplomacyCadence = GetPerformanceCadence(game, data, "diplomacy");
 
     for playerID, player
         in pairs(
@@ -12608,7 +12706,9 @@ ProcessAIIncomingFactionInvites(
                 game,
                 data,
                 playerID
-            ) then
+            )
+            and ShouldRunAIWork(data, playerID, diplomacyCadence)
+        then
 
 
             local nation =
@@ -12918,96 +13018,30 @@ function ApplyTradeIncome(
 
 end
 
-function GetAIBestCityTerritory(
-    game,
-    data,
-    playerID
-)
+function GetAIBestCityTerritory(game, data, playerID)
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing == nil or standing.Territories == nil then return nil; end
 
-    if game == nil
-        or game.ServerGame == nil
-        or game.ServerGame.LatestTurnStanding == nil
-        or game.ServerGame.LatestTurnStanding.Territories == nil
-    then
+    local perf = BuildAdvanceTurnPerformanceCache(game, data);
+    local owned = perf.ownedTerritories[playerID] or {};
+    local bestTerritoryID = nil;
+    local bestScore = -999999;
 
-        return nil;
-
-    end
-
-    local standing =
-        game.ServerGame.LatestTurnStanding;
-
-    local bestTerritoryID =
-        nil;
-
-    local bestScore =
-        -999999;
-
-    for territoryID, territoryStanding
-        in pairs(
-            standing.Territories
-        ) do
-
-        if territoryStanding ~= nil
-            and territoryStanding.OwnerPlayerID
-            == playerID
-        then
-
-            local score =
-                0;
-
-            local structures =
-                territoryStanding.Structures
-                or {};
-
-            local cityCount =
-                structures[
-                    WL.StructureType.City
-                ]
-                or 0;
-
-            -- Prefer spreading cities rather than
-            -- stacking too many on one territory.
-
-
-            score =
-    score
-    - (cityCount * 2);
-
-
-
-            local defenseValue =
-                GetAITerritoryDefenseValue(
-                    game,
-                    data,
-                    playerID,
-                    territoryID
-                );
-
-            -- Safer / more valuable territories
-            -- make better city locations.
-
-            score =
-                score
-                + defenseValue;
-
-
+    for _, territoryID in ipairs(owned) do
+        local territoryStanding = standing.Territories[territoryID];
+        if territoryStanding ~= nil then
+            local structures = territoryStanding.Structures or {};
+            local cityCount = structures[WL.StructureType.City] or 0;
+            local threat = perf.territoryThreat[territoryID] or 0;
+            local score = -(cityCount * 2) - math.floor(threat * 0.25);
             if score > bestScore then
-
-                bestScore =
-                    score;
-
-                bestTerritoryID =
-                    territoryID;
-
+                bestScore = score;
+                bestTerritoryID = territoryID;
             end
-
         end
-
     end
 
     return bestTerritoryID;
-
 end
 
 function AIConsiderCityConstruction(
@@ -13311,43 +13345,15 @@ end
             playerID
         );
 
-    local atWar =
-        false;
-
-    for otherPlayerID, otherPlayer
-        in pairs(
-            game.Game.Players
-        ) do
-
-        if otherPlayerID ~= playerID
-            and otherPlayer ~= nil
-            and not otherPlayer.Surrendered
-            and IsDiplomacyWar(
-                data,
-                playerID,
-                otherPlayerID
-            )
-        then
-
-            atWar =
-                true;
-
-            break;
-
-        end
-
-    end
+    local perf = BuildAdvanceTurnPerformanceCache(game, data);
+    local atWar = perf.atWar[playerID] == true;
 
 local strategicState =
     "stable";
 
-local bestDefenseTerritoryID,
-      bestDefenseValue =
-    GetAIBestDefenseTerritory(
-        game,
-        data,
-        playerID
-    );
+local bestDefenseValue =
+    perf.playerThreat[playerID]
+    or 0;
 
 if atWar then
 
@@ -16325,6 +16331,11 @@ function Server_AdvanceTurn_Start(
     local data =
         GetEconomicData();
 
+    TURN_COMMERCE_INCOME_CACHE = {};
+    TURN_STORED_GOLD_CACHE = {};
+    ADVANCE_TURN_PERFORMANCE_CACHE = nil;
+    ADVANCE_TURN_BORDER_CACHE = {};
+    ADVANCE_TURN_ORDER_DATA_CACHE = data;
 
     data.tradeTurn =
         data.tradeTurn
@@ -16396,6 +16407,11 @@ function Server_AdvanceTurn_Start(
         data
     );
 
+    -- Diplomacy decisions can start/end wars. Rebuild the lightweight threat
+    -- cache before later AI economy/city work so the new war state is visible.
+    ADVANCE_TURN_PERFORMANCE_CACHE = nil;
+    ADVANCE_TURN_BORDER_CACHE = {};
+
     ProcessWarEvents(
         game,
         data,
@@ -16424,6 +16440,8 @@ function Server_AdvanceTurn_Start(
     -- AI TRADE STRATEGY
     -- =====================================================
 
+    local aiTradeCadence = GetPerformanceCadence(game, data, "trade");
+
     for playerID, player
         in pairs(
             game.Game.Players
@@ -16440,6 +16458,7 @@ function Server_AdvanceTurn_Start(
                 data,
                 playerID
             )
+            and ShouldRunAIWork(data, playerID, aiTradeCadence)
         then
 
 
@@ -16506,6 +16525,9 @@ TrimMarketNews(
     -- AI INVESTMENT ECONOMY
     -- =====================================================
 
+    local aiEconomyCadence = GetPerformanceCadence(game, data, "economy");
+    local aiCityCadence = GetPerformanceCadence(game, data, "city");
+
     for playerID, player
         in pairs(
             game.Game.Players
@@ -16530,52 +16552,25 @@ UpdateAIStrategicReserve(
     playerID
 );
 
-AIConsiderCityConstruction(
-    game,
-    data,
-    playerID,
-    addNewOrder
-);
+if ShouldRunAIWork(data, playerID, aiCityCadence) then
+    AIConsiderCityConstruction(game, data, playerID, addNewOrder);
+end
 
-local aiEconomyPhase =
-    (
-        data.tradeTurn
-        + playerID
-    )
-    % 2;
-
-if aiEconomyPhase == 0 then
-
-    ProcessAIMarketSelling(
-        game,
-        data,
-        resourceChanges,
-        playerID
-    );
-
-    ProcessAIMarketBuying(
-        game,
-        data,
-        resourceChanges,
-        playerID
-    );
-
-else
-
-    AIConsiderProjectCreation(
-        game,
+if ShouldRunAIWork(data, playerID, aiEconomyCadence) then
+    local aiEconomyPhase = GetStaggeredAIPhase(
         data,
         playerID,
-        resourceChanges
+        aiEconomyCadence,
+        2
     );
 
-    AIConsiderInvestment(
-        game,
-        data,
-        playerID,
-        resourceChanges
-    );
-
+    if aiEconomyPhase == 0 then
+        ProcessAIMarketSelling(game, data, resourceChanges, playerID);
+        ProcessAIMarketBuying(game, data, resourceChanges, playerID);
+    else
+        AIConsiderProjectCreation(game, data, playerID, resourceChanges);
+        AIConsiderInvestment(game, data, playerID, resourceChanges);
+    end
 end
 
 end
@@ -16745,21 +16740,9 @@ end
     );
 
 
-    -- =====================================================
-    -- FINAL STATE CLEANUP
-    -- =====================================================
-
-    CleanupTradeData(
-        game,
-        data
-    );
-
-
-    CleanupDiplomacyOffers(
-        game,
-        data
-    );
-
+    -- Cleanup already ran after diplomacy decisions. Avoid another full
+    -- trade/diplomacy scan here; market/investment work below cannot change
+    -- diplomatic relationships.
 
     -- =====================================================
     -- SAVE
@@ -17032,54 +17015,33 @@ if order.proxyType == "GameOrderDeploy" then
     end
 
     local data =
-        GetEconomicData();
+        ADVANCE_TURN_ORDER_DATA_CACHE
+        or GetEconomicData();
 
     if data == nil then
         return;
     end
 
-    local hasPeacefulForeignBorder =
-        false;
+    local borderKey = tostring(deployPlayerID) .. ":" .. tostring(deployTerritoryID);
+    local hasPeacefulForeignBorder = ADVANCE_TURN_BORDER_CACHE[borderKey];
 
-    for connectedTerritoryID, _
-        in pairs(
-            territoryDetails.ConnectedTo
-            or {}
-        )
-    do
-
-        local connectedStanding =
-            standing.Territories[
-                connectedTerritoryID
-            ];
-
-        if connectedStanding ~= nil then
-
-            local otherPlayerID =
-                connectedStanding.OwnerPlayerID;
-
-            if otherPlayerID ~= nil
-                and otherPlayerID ~= deployPlayerID
-                and otherPlayerID ~= WL.PlayerID.Neutral
-            then
-
-                if not IsDiplomacyWar(
-                    data,
-                    deployPlayerID,
-                    otherPlayerID
-                ) then
-
-                    hasPeacefulForeignBorder =
-                        true;
-
+    if hasPeacefulForeignBorder == nil then
+        hasPeacefulForeignBorder = false;
+        for connectedTerritoryID, _ in pairs(territoryDetails.ConnectedTo or {}) do
+            local connectedStanding = standing.Territories[connectedTerritoryID];
+            if connectedStanding ~= nil then
+                local otherPlayerID = connectedStanding.OwnerPlayerID;
+                if otherPlayerID ~= nil
+                    and otherPlayerID ~= deployPlayerID
+                    and otherPlayerID ~= WL.PlayerID.Neutral
+                    and not IsDiplomacyWar(data, deployPlayerID, otherPlayerID)
+                then
+                    hasPeacefulForeignBorder = true;
                     break;
-
                 end
-
             end
-
         end
-
+        ADVANCE_TURN_BORDER_CACHE[borderKey] = hasPeacefulForeignBorder;
     end
 
     if hasPeacefulForeignBorder
@@ -17217,7 +17179,8 @@ end
     -- =====================================================
 
     local data =
-        GetEconomicData();
+        ADVANCE_TURN_ORDER_DATA_CACHE
+        or GetEconomicData();
 
 
     if data == nil then
@@ -17364,9 +17327,11 @@ end
         result
     );
 
-    -- Server_AdvanceTurn_Order runs independently from the turn-start hook.
-    -- Persist the updated war statistics so Current Wars can display them.
-    Mod.PublicGameData = data;
+    -- Normally Server_AdvanceTurn_End persists accumulated war statistics once.
+    -- Keep a fallback write only if this hook ever runs without the turn cache.
+    if ADVANCE_TURN_ORDER_DATA_CACHE == nil then
+        Mod.PublicGameData = data;
+    end
 
     return;
 
@@ -17453,7 +17418,8 @@ function Server_AdvanceTurn_End(
 )
 
     local data =
-        GetEconomicData();
+        ADVANCE_TURN_ORDER_DATA_CACHE
+        or GetEconomicData();
 
 
     ProcessPendingWarDeclarations(
@@ -17482,5 +17448,11 @@ function Server_AdvanceTurn_End(
 
     Mod.PublicGameData =
         data;
+
+    ADVANCE_TURN_ORDER_DATA_CACHE = nil;
+    ADVANCE_TURN_BORDER_CACHE = {};
+    ADVANCE_TURN_PERFORMANCE_CACHE = nil;
+    TURN_COMMERCE_INCOME_CACHE = {};
+    TURN_STORED_GOLD_CACHE = {};
 
 end

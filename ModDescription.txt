@@ -1,249 +1,76 @@
-Trade Agreement V2 is a Commerce-focused economic and diplomacy mod that adds trade agreements, investments, taxation, ideology, stock markets, flagship companies, ETFs, dividends, and enhanced AI behavior.
+GLOBAL AFFAIRS V3
+
+Global Affairs V3 is a Commerce-focused economy, diplomacy, market, strategic-resource, United Nations, and enhanced-AI mod for War.app.
+
+CORE ECONOMY
+
+Players manage Commerce through taxation, ideology, trade agreements, investments, flagship companies, stocks, dividends, ETF holdings, and strategic resources. Commerce is both economic power and an important source of military purchasing power.
 
 TRADE AGREEMENTS
 
-Players may propose bilateral trade agreements with other human or AI nations.
-
-Active trade agreements provide both nations with additional Commerce income each turn. Trade benefits are based on each nation's current Commerce income and the host-configured trade settings.
-
-Players can view active agreements, find potential partners, and review recent diplomacy activity from the mod menu.
-
+Players may propose bilateral Trade Agreements with human or AI nations. Active agreements provide recurring Commerce benefits while the nations remain eligible to trade. War, diplomatic restrictions, and some UN actions can interrupt or end trade.
 
 INVESTMENTS
 
-Players and AI nations may create and invest in economic projects.
+Players and AI may create and fund investment projects. Projects have funding goals, development times, risk, potential returns, and failure/recovery rules. Successful projects return principal plus profit; unfunded projects refund committed principal under the configured rules.
 
-Projects have:
-- Funding goals
-- Investment limits
-- Development times
-- Risk levels
-- Potential returns
+MARKETS
 
-Successful projects return invested principal plus profit.
+Eligible nations may establish flagship companies. Players and AI can buy and sell shares, receive dividends, track cost basis and profit/loss, trade an ETF, and view market history. Companies support Growth, Balanced, and Dividend strategies. Owners may issue new public shares with a cooldown, and high-priced companies may perform 2-for-1 stock splits.
 
-Failed projects return the configured recovery amount.
+TAXATION AND IDEOLOGY
 
-Projects that fail to reach their funding goal before the deadline refund committed principal.
+Tax policies: Low, Standard, High.
 
+Ideologies include Free Market, Capitalist, Social Democratic, State Capitalist, Socialist, Communist, Fascist, and Nationalist. Ideology influences Commerce, market/investment behavior, company confidence, and AI economic decisions.
 
-STOCK MARKET
+DIPLOMACY AND WAR
 
-Eligible nations may establish a flagship company.
+Diplomacy includes player search/overview, wars, peace, Non-Aggression Pacts, alliances, relationship history, and Current Wars. Current Wars tracks war duration, attacks, combat losses, territories captured, and direct wartime decision costs.
 
-Each company has:
-- A stock price
-- Total shares
-- Publicly available shares
-- Market capitalization
-- Company strategy
-- Shareholders
-- Price history
+War Events can present human players with strategic choices. Players have one turn to answer; an unanswered event automatically receives a balanced response. Existing armies are never deleted by these systems.
 
-Players and AI nations may buy and sell shares.
+AI MANAGER
 
-Company prices react to market activity and economic conditions.
-
-
-COMPANY STRATEGIES
-
-Flagship companies may follow one of several strategies:
-
-Growth
-Focuses more heavily on expansion and provides lower dividend payouts.
-
-Balanced
-Balances company growth and shareholder returns.
-
-Dividend
-Provides larger dividend payouts to shareholders.
-
-
-DIVIDENDS
-
-Companies may distribute dividends to shareholders each turn.
-
-Dividend payments are calculated per share.
-
-Fractional dividend amounts are carried forward until they accumulate into whole Commerce gold.
-
-Players can track total dividends received through their portfolio.
-
-
-SHARE ISSUANCE
-
-Flagship company owners may issue additional public shares.
-
-Available issuance options are:
-- 10 shares
-- 25 shares
-- 50 shares
-
-Issuing additional shares increases the company's total share count and places new shares on the public market.
-
-Existing shareholders are diluted because their existing shares represent a smaller percentage of the company.
-
-Share issuance has a 5-turn cooldown.
-
-
-STOCK SPLITS
-
-Companies with very high stock prices may perform a 2-for-1 stock split.
-
-During a split:
-- Stock price is approximately halved
-- Total shares double
-- Existing shareholder share counts double
-
-The economic value of each shareholder's position remains approximately the same.
-
-
-ETF
-
-The market includes an ETF representing leading companies.
-
-The ETF periodically rebalances based on market performance.
-
-Players may:
-- Buy ETF shares
-- Sell ETF shares
-- Receive ETF dividends
-- View ETF price history and portfolio value
-
-
-TAXATION
-
-Each nation may choose a tax policy.
-
-Available policies include:
-
-Low Tax
-Encourages markets and investment but produces less direct Commerce.
-
-Standard Tax
-Provides balanced economic effects.
-
-High Tax
-Provides more direct Commerce but creates larger penalties to market and investment activity.
-
-
-IDEOLOGY
-
-Each nation may select an economic ideology.
-
-Available ideologies include:
-
-- Free Market
-- Capitalist
-- Social Democratic
-- State Capitalist
-- Socialist
-
-Ideology affects Commerce, market performance, investment behavior, company confidence, and AI economic decisions.
-
-
-DIPLOMACY
-
-The Diplomacy section allows players to:
-
-- Search for other nations
-- View player economic information
-- View ideology and tax policy
-- Review diplomatic relationships
-- View NAP and alliance status
-- View flagship company information
-- Review recent diplomacy history
-
-
-SMART AI
-
-AI nations use enhanced economic and military decision-making.
-
-AI nations may:
-- Buy and sell stocks
-- Invest in projects
-- Build cities
-- Maintain strategic gold reserves
-- Adjust spending based on economic conditions
-- Evaluate territory defense
-- Avoid unnecessary troop stacking on peaceful borders
-- Save Commerce for future wars
-- Reinforce active war fronts more aggressively
-- Adjust decisions based on AI economic profiles and ideology
-
-During peace, AI nations generally maintain moderate border defenses while preserving part of their Commerce.
-
-When war begins, more of the accumulated reserve becomes available for military spending.
-
-
-MOD MENU
-
-Open the mod menu from:
-
-Game > Mod > Trade Agreement V2
-
-The menu includes:
-
-- Overview
-- Diplomacy
-- Trade Agreements
-- Investments
-- Markets
-- Taxation
-- Global Economy
-- How It Works
-- Customize Tabs
-
-
-HOST CONFIGURATION
-
-The host may configure many economic and gameplay settings before the game begins.
-
-Settings can affect trade, investments, taxation, market behavior, AI behavior, and other economic systems.
-
-
-GENERAL NOTES
-
-This mod is designed around Commerce games.
-
-Economic systems continue to develop over multiple turns, so market prices, company ownership, investments, dividends, taxation, diplomacy, and AI strategy may change significantly throughout a game.
-
-For best results, players should regularly review the mod menu and monitor their nation's economy, investments, diplomatic relationships, and market positions.
-
-
-FUTURE DEVELOPMENT
-
-United Nations features are planned for a future V3 release.
-
-Some temporary UN-related configuration may still exist in the current codebase, but the UN system is not active or supported in Trade Agreement V2.
-
-
-STRATEGIC RESOURCES (V3)
-
-When enabled by the host, nations receive territory-based strategic resource deposits using 2026 slot profiles. Resources produce every turn, transfer with territory ownership, may be traded through recurring contracts, and shortages reduce usable Commerce / military spending power. Players can invest gold to upgrade facilities on deposits they control.
+When allowed by the host, human players may enable an AI Manager with a defined per-turn budget. The manager handles markets and investments only. It does not control diplomacy, trade agreements, tax policy, ideology, or military orders. Canceling it takes effect after the configured one-turn delay.
 
 STRATEGIC RESOURCES
 
-When enabled by the host, territories may contain strategic Resource Hubs. Oil, Gas, Uranium, Iron, Food, Rare Earths, and optional advanced resources influence economic output, military readiness, mobilization, and national unrest. Existing armies are never removed by resource shortages. Resource Hubs use one shared map icon with a number showing the territory's combined facility level.
+When enabled, territories may contain Oil, Gas, Uranium, Iron, Food, Rare Earths, and optional Coal, Copper, and Lithium. Production follows territory ownership, so capturing a resource territory transfers its production after the turn resolves.
+
+Nations have resource requirements. Falling below them can reduce Commerce, lower Military Readiness, and increase unrest. Existing armies are not removed by shortages. Players may develop/upgrade resource facilities with gold and create recurring resource trade contracts.
+
+Each resource territory shows one dominant-resource icon with a numeric badge representing its combined facility/deposit level. The host may disable resource map icons globally while leaving the resource economy active.
 
 UNITED NATIONS / SECURITY COUNCIL
 
-When enabled by the host, the United Nations creates a Security Council with configurable permanent and rotating seats. Permanent members have veto power. Initial resolution types include sanctions, embargoes, aid, condemnations, and ceasefires. AI council members vote automatically while human council members vote through the mod menu.
+The UN is optional and host-controlled. The Security Council has configurable permanent and rotating seats. Permanent members have veto power over Security Council resolutions. Human council members vote YES / NO / ABSTAIN and AI council members vote automatically.
 
-V3 PHASE 6-7
+Initial resolutions:
+- Economic Sanctions
+- Trade Embargo
+- Economic Aid
+- Condemn Nation
+- Peace / Ceasefire
 
-CURRENT WARS AND WAR EVENTS
-- Diplomacy now includes a Current Wars dashboard with war duration, attacks, combat losses, territory captures, and direct wartime decision costs.
-- Human nations periodically receive wartime strategic choices when enabled by the host.
-- Players may hide War Event pop-up alerts while keeping the underlying event choices active in Diplomacy.
+Proposal cooldowns prevent resolution spam, and the UN screen explains the effect of each resolution before submission.
 
-RESOURCE MAP POLISH
-- Resource territories use distinct resource-specific custom icons.
-- Only one resource icon is shown per territory. The dominant resource controls the icon and a numeric badge shows the combined facility/deposit level.
+SMART AI
 
-UN POLISH
-- Proposal cooldown status is shown live to each player.
-- Sanctions, Embargo, Aid, Condemnation, and Ceasefire show their exact consequences before submission.
+AI nations can manage strategic reserves, markets, investments, city construction, trade strategy, diplomacy, peaceful-border troop limits, and wartime behavior. Large games automatically stagger non-urgent AI work to reduce advance-turn time while critical maintenance continues every turn.
 
 HOW IT WORKS
-- Expanded into a full player learning guide with examples and an icon legend.
+
+The in-game How It Works guide provides a Quick Start, examples, resource roles, Military Readiness explanations, map-icon guidance, market and investment instructions, diplomacy/war guidance, AI Manager instructions, UN consequences, and host configuration guidance.
+
+HOST CONFIGURATION
+
+Major systems including Resources, resource map icons, the United Nations, AI Manager availability, War Events, market/economic settings, and other mechanics are host-configurable.
+
+PERFORMANCE
+
+Global Affairs V3 includes large-game performance safeguards such as per-turn economic caches, shared AI threat calculation, cached territory lists, reduced repeated data writes, and automatic AI work staggering for larger and Mega Games.
+
+GENERAL NOTES
+
+This mod is designed primarily for Commerce games. Economic and diplomatic systems develop across multiple turns. For best results, use the in-game How It Works guide and review your nation's Commerce, resource position, Military Readiness, diplomacy, investments, and market exposure regularly.
