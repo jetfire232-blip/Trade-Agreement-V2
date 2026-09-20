@@ -216,3 +216,16 @@ FUTURE DEVELOPMENT
 United Nations features are planned for a future V3 release.
 
 Some temporary UN-related configuration may still exist in the current codebase, but the UN system is not active or supported in Trade Agreement V2.
+
+
+STRATEGIC RESOURCES (V3)
+
+When enabled by the host, nations receive territory-based strategic resource deposits using 2026 slot profiles. Resources produce every turn, transfer with territory ownership, may be traded through recurring contracts, and shortages reduce usable Commerce / military spending power. Players can invest gold to upgrade facilities on deposits they control.
+
+STRATEGIC RESOURCES
+
+When enabled by the host, territories may contain strategic Resource Hubs. Oil, Gas, Uranium, Iron, Food, Rare Earths, and optional advanced resources influence economic output, military readiness, mobilization, and national unrest. Existing armies are never removed by resource shortages. Resource Hubs use one shared map icon with a number showing the territory's combined facility level.
+
+UNITED NATIONS / SECURITY COUNCIL
+
+When enabled by the host, the United Nations creates a Security Council with configurable permanent and rotating seats. Permanent members have veto power. Initial resolution types include sanctions, embargoes, aid, condemnations, and ceasefires. AI council members vote automatically while human council members vote through the mod menu.
