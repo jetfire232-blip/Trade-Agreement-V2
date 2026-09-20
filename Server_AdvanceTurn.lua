@@ -2980,7 +2980,8 @@ function ActivateDiplomacyWar(
     data,
     playerA,
     playerB,
-    reason
+    reason,
+    conflictID
 )
 
     local diplomacy =
@@ -3030,6 +3031,15 @@ function ActivateDiplomacyWar(
     relationship.warActivatesTurn =
         nil;
 
+    relationship.warReason =
+        reason
+        or relationship.warReason
+        or "Territorial Dispute";
+
+    relationship.warConflictID =
+        conflictID
+        or relationship.warConflictID;
+
 
     local key =
         EconomyPairKey(
@@ -3048,6 +3058,8 @@ function ActivateDiplomacyWar(
         startTurn = currentTurn,
         endTurn = nil,
         active = true,
+        reason = relationship.warReason,
+        conflictID = relationship.warConflictID,
         attacks = 0,
         casualties = {
             [tostring(playerA)] = 0,
@@ -3063,6 +3075,33 @@ function ActivateDiplomacyWar(
         }
     };
 
+
+    diplomacy.warConflicts = diplomacy.warConflicts or {};
+    diplomacy.nextWarConflictID = diplomacy.nextWarConflictID or 1;
+    local resolvedConflictID = relationship.warConflictID;
+    if resolvedConflictID == nil then
+        resolvedConflictID = diplomacy.nextWarConflictID;
+        diplomacy.nextWarConflictID = resolvedConflictID + 1;
+        relationship.warConflictID = resolvedConflictID;
+    end
+    local conflict = diplomacy.warConflicts[resolvedConflictID];
+    if conflict == nil then
+        conflict = {
+            id = resolvedConflictID,
+            cause = relationship.warReason,
+            startTurn = currentTurn,
+            active = true,
+            sideA = {},
+            sideB = {}
+        };
+        diplomacy.warConflicts[resolvedConflictID] = conflict;
+    end
+    conflict.active = true;
+    conflict.cause = conflict.cause or relationship.warReason;
+    conflict.sideA = conflict.sideA or {};
+    conflict.sideB = conflict.sideB or {};
+    conflict.sideA[playerA] = true;
+    conflict.sideB[playerB] = true;
 
     diplomacy.pendingWarDeclarations[
         key
@@ -3440,7 +3479,13 @@ function ProcessPendingWarDeclarations(
                                 fromPlayerID,
 
                             toPlayerID =
-                                toPlayerID
+                                toPlayerID,
+
+                            warReason =
+                                declaration.warReason,
+
+                            conflictID =
+                                declaration.conflictID
                         }
                     );
                 end
@@ -3468,7 +3513,8 @@ function ProcessPendingWarDeclarations(
                 data,
                 entry.fromPlayerID,
                 entry.toPlayerID,
-                "delayed_declaration"
+                entry.warReason or "Territorial Dispute",
+                entry.conflictID
             );
         end
     end
@@ -4315,14 +4361,18 @@ function CalculateStockPriceChangePercent(
     if company.strategy
         == "Growth" then
 
+        -- Growth companies retain more earnings and therefore receive a
+        -- stronger capital-appreciation multiplier.
         strategyMultiplier =
-            1.20;
+            1.35;
 
     elseif company.strategy
         == "Dividend" then
 
+        -- Dividend companies return more value as cash and should generally
+        -- appreciate more slowly than Growth names.
         strategyMultiplier =
-            0.80;
+            0.45;
 
     end
 
@@ -4330,12 +4380,19 @@ function CalculateStockPriceChangePercent(
         company.volatility
         or 10;
 
+    local randomScale = 0.25;
+    if company.strategy == "Dividend" then
+        randomScale = 0.15;
+    elseif company.strategy == "Growth" then
+        randomScale = 0.30;
+    end
+
     local randomChange =
         math.random(
             -volatility,
             volatility
         )
-        * 0.25;
+        * randomScale;
 
     local buyVolume =
     company.buyVolumeThisTurn
@@ -4418,6 +4475,15 @@ function CalculateCompanyDividendPool(
 
         payoutPercent =
             4;
+
+        -- Successful Dividend flagships reward holders primarily through
+        -- rising distributions rather than Growth-style price acceleration.
+        local growth = tonumber(company.ownerIncomeGrowthPercent) or 0;
+        if growth >= 15 then
+            payoutPercent = 6;
+        elseif growth >= 5 then
+            payoutPercent = 5;
+        end
 
     end
 
@@ -9429,6 +9495,14 @@ end
                 )
                 * newPrice;
 
+            local previousOwnerIncome = company.lastOwnerIncome or ownerIncome;
+            if previousOwnerIncome > 0 then
+                company.ownerIncomeGrowthPercent =
+                    ((ownerIncome - previousOwnerIncome) / previousOwnerIncome) * 100;
+            else
+                company.ownerIncomeGrowthPercent = 0;
+            end
+
             company.lastOwnerIncome =
                 ownerIncome;
 
@@ -9507,7 +9581,8 @@ end
 
 function ProcessMarketETF(
     game,
-    data
+    data,
+    resourceChanges
 )
 
     local economy =
@@ -9589,9 +9664,10 @@ function ProcessMarketETF(
     -- REBALANCE ETF
     -- =========================================
 
-    local rebalanceInterval =
-        etf.rebalanceInterval
-        or 5;
+    -- Global ETF is intentionally refreshed every 5 turns so holdings stay
+    -- current without reshuffling every single market tick.
+    local rebalanceInterval = 5;
+    etf.rebalanceInterval = rebalanceInterval;
 
     local lastRebalanceTurn =
         etf.lastRebalanceTurn
@@ -9683,6 +9759,36 @@ table.insert(
             " holdings."
     }
 );
+
+        -- ETF holders receive a visible diversification/performance bonus on
+        -- each 5-turn rebalance cycle.  This is separate from normal ETF
+        -- dividends so players can clearly see the benefit of holding the ETF.
+        local bonusPaid = 0;
+        for playerID, nation in pairs(economy.nations or {}) do
+            nation.etfBonusThisTurn = 0;
+            nation.etfRebalanceBonusesReceived = nation.etfRebalanceBonusesReceived or 0;
+            local shares = math.max(0, tonumber(nation.etfShares) or 0);
+            if shares > 0 then
+                local price = tonumber(etf.currentPrice or etf.startingPrice) or 100;
+                local positionValue = shares * price;
+                local bonus = math.max(1, math.floor(positionValue * 0.01 + 0.5));
+                nation.etfBonusThisTurn = bonus;
+                nation.etfRebalanceBonusesReceived = nation.etfRebalanceBonusesReceived + bonus;
+                bonusPaid = bonusPaid + bonus;
+                if resourceChanges ~= nil then
+                    AddResourceChange(resourceChanges, playerID, bonus);
+                end
+            end
+        end
+        etf.lastHolderBonusPaid = bonusPaid;
+        etf.lastHolderBonusTurn = currentTurn;
+        if bonusPaid > 0 then
+            table.insert(market.news, {
+                turn = currentTurn,
+                type = "etf_bonus",
+                message = "Global Market ETF paid " .. tostring(bonusPaid) .. " Commerce in 5-turn holder bonuses."
+            });
+        end
 
     end
 
@@ -10547,6 +10653,9 @@ end
 -- AI WAR DECLARATION
 -- =========================================================
 
+local SelectAIWarReason;
+local PlayersShareLandBorder;
+
 function QueueAIWarDeclaration(
     game,
     data,
@@ -10643,6 +10752,27 @@ end
     local delay =
         GetWarDeclarationDelay();
 
+    local warReason =
+        SelectAIWarReason(
+            game,
+            data,
+            aiPlayerID,
+            targetPlayerID
+        );
+
+    diplomacy.nextWarConflictID = diplomacy.nextWarConflictID or 1;
+    diplomacy.warConflicts = diplomacy.warConflicts or {};
+    local conflictID = diplomacy.nextWarConflictID;
+    diplomacy.nextWarConflictID = conflictID + 1;
+    diplomacy.warConflicts[conflictID] = {
+        id = conflictID,
+        cause = warReason,
+        startTurn = currentTurn,
+        active = delay <= 0,
+        sideA = {[aiPlayerID] = true},
+        sideB = {[targetPlayerID] = true}
+    };
+
 
     local aiName =
         GetEconomicPlayerName(
@@ -10706,7 +10836,8 @@ end
             data,
             aiPlayerID,
             targetPlayerID,
-            "ai_declaration"
+            warReason,
+            conflictID
         );
 
 
@@ -10750,7 +10881,13 @@ end
             true,
 
         aiActivity =
-            true
+            true,
+
+        warReason =
+            warReason,
+
+        conflictID =
+            conflictID
     };
 
 
@@ -10776,6 +10913,12 @@ end
 
     relationship.warActivatesTurn =
         activatesTurn;
+
+    relationship.warReason =
+        warReason;
+
+    relationship.warConflictID =
+        conflictID;
 
 
     local message =
@@ -10826,6 +10969,76 @@ end
 
 end
 
+
+-- =========================================================
+-- AI WAR BORDER / REASON HELPERS
+-- =========================================================
+
+local AI_WAR_BORDER_CACHE_TURN = nil;
+local AI_WAR_BORDER_CACHE = nil;
+
+local function BuildAIWarBorderCache(game, data)
+    local turn = data.tradeTurn or 0;
+    if AI_WAR_BORDER_CACHE ~= nil and AI_WAR_BORDER_CACHE_TURN == turn then
+        return AI_WAR_BORDER_CACHE;
+    end
+
+    local borders = {};
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing ~= nil and standing.Territories ~= nil then
+        for territoryID, terrStanding in pairs(standing.Territories) do
+            local owner = terrStanding and terrStanding.OwnerPlayerID or nil;
+            local details = game.Map and game.Map.Territories and game.Map.Territories[territoryID] or nil;
+            if owner ~= nil and owner ~= WL.PlayerID.Neutral and details ~= nil then
+                borders[owner] = borders[owner] or {};
+                for connectedID, _ in pairs(details.ConnectedTo or {}) do
+                    local other = standing.Territories[connectedID];
+                    local otherOwner = other and other.OwnerPlayerID or nil;
+                    if otherOwner ~= nil and otherOwner ~= WL.PlayerID.Neutral and otherOwner ~= owner then
+                        borders[owner][otherOwner] = true;
+                    end
+                end
+            end
+        end
+    end
+
+    AI_WAR_BORDER_CACHE_TURN = turn;
+    AI_WAR_BORDER_CACHE = borders;
+    return borders;
+end
+
+PlayersShareLandBorder = function(game, data, playerA, playerB)
+    local borders = BuildAIWarBorderCache(game, data);
+    return borders[playerA] ~= nil and borders[playerA][playerB] == true;
+end
+
+SelectAIWarReason = function(game, data, aiPlayerID, targetPlayerID)
+    local economy = data.globalEconomy or {};
+    local aiNation = (economy.nations or {})[aiPlayerID] or {};
+    local targetNation = (economy.nations or {})[targetPlayerID] or {};
+    local shortages = aiNation.resourceShortages or {};
+    for _, amount in pairs(shortages) do
+        if (tonumber(amount) or 0) > 0 then
+            return "Resource Security";
+        end
+    end
+
+    if aiNation.ideology ~= nil and targetNation.ideology ~= nil and aiNation.ideology ~= targetNation.ideology then
+        return "Ideological Conflict";
+    end
+
+    local aiIncome = GetCommerceIncome(game, aiPlayerID);
+    local targetIncome = GetCommerceIncome(game, targetPlayerID);
+    if targetIncome > aiIncome * 1.15 then
+        return "National Defense / Border Threat";
+    end
+
+    if HasAgreement(data, aiPlayerID, targetPlayerID) then
+        return "Economic Conflict";
+    end
+
+    return "Territorial Dispute";
+end
 
 -- =========================================================
 -- AI WAR TARGET
@@ -10888,6 +11101,15 @@ function FindAIWarTarget(
             ) <= 0
 
             and not HasPendingDiplomacyWar(
+                data,
+                aiPlayerID,
+                playerID
+            )
+            -- Independent AI declarations require an actual shared land
+            -- border.  Distant wars can still happen later through joining a
+            -- faction/coalition conflict, but random cross-map declarations do not.
+            and PlayersShareLandBorder(
+                game,
                 data,
                 aiPlayerID,
                 playerID
@@ -14125,6 +14347,8 @@ local function EnsureNationResourceState(nation)
     nation.resourceProduction = nation.resourceProduction or {};
     nation.resourceEffective = nation.resourceEffective or {};
     nation.resourceShortages = nation.resourceShortages or {};
+    nation.resourceRequirements = nation.resourceRequirements or {};
+    if nation.resourceRequirementsInitialized == nil then nation.resourceRequirementsInitialized = false; end
     nation.resourcePenaltyPercent = nation.resourcePenaltyPercent or 0;
     nation.resourceMilitaryReadiness = nation.resourceMilitaryReadiness or 100;
     nation.resourceUnrest = nation.resourceUnrest or 0;
@@ -14180,15 +14404,86 @@ local function ProcessPendingResourceBuilds(game, data, resourceChanges, addNewO
                 {}, {terrMod}, nil, nil
             );
             addNewOrder(event);
-            AddResourceChange(resourceChanges, build.playerID, -(build.cost or 0));
+            -- Phase 10 builds are already paid when ordered. Keep legacy compatibility.
+            if build.paid ~= true then
+                AddResourceChange(resourceChanges, build.playerID, -(build.cost or 0));
+            end
             nation.resourceBuildReservedGold = math.max(0, (nation.resourceBuildReservedGold or 0) - (build.cost or 0));
         else
+            -- If a paid build cannot complete (most commonly because the territory was lost), refund it.
+            if nation ~= nil and build.paid == true and (build.cost or 0) > 0 then
+                AddResourceChange(resourceChanges, build.playerID, build.cost or 0);
+            end
             if nation ~= nil then
                 nation.resourceBuildReservedGold = math.max(0, (nation.resourceBuildReservedGold or 0) - (build.cost or 0));
             end
         end
     end
     resources.pendingBuilds = remaining;
+end
+
+local function EnsureArmyRecruiterState(data)
+    local economy = data.globalEconomy;
+    if economy == nil then return nil; end
+    economy.armyRecruiters = economy.armyRecruiters or {enabled=true, territories={}, pendingBuilds={}};
+    local r = economy.armyRecruiters;
+    r.territories = r.territories or {}; r.pendingBuilds = r.pendingBuilds or {};
+    r.enabled = GetSetting("ArmyRecruitersEnabled", true) == true;
+    return r;
+end
+
+local function RecruiterStructureName(level)
+    return "ArmyRecruiter" .. tostring(math.max(1, math.min(5, math.floor(tonumber(level) or 1))));
+end
+
+local function BuildRecruiterStructures(existing, level)
+    local result = {};
+    for structureType, amount in pairs(existing or {}) do
+        local key = tostring(structureType);
+        if string.find(key, "ArmyRecruiter", 1, true) == nil then result[structureType] = amount; end
+    end
+    if (tonumber(level) or 0) > 0 then result[WL.StructureType.Custom(RecruiterStructureName(level))] = 1; end
+    return result;
+end
+
+local function ProcessPendingArmyRecruiters(game, data, resourceChanges, addNewOrder)
+    local r = EnsureArmyRecruiterState(data); if r == nil or r.enabled ~= true then return; end
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding; if standing == nil then return; end
+    local pending = r.pendingBuilds or {}; r.pendingBuilds = {};
+    for _, build in ipairs(pending) do
+        local terr = standing.Territories[build.territoryID];
+        if terr ~= nil and terr.OwnerPlayerID == build.playerID then
+            r.territories[build.territoryID] = build.toLevel;
+            local mod = WL.TerritoryModification.Create(build.territoryID);
+            mod.SetStructuresOpt = BuildRecruiterStructures(terr.Structures or {}, build.toLevel);
+            addNewOrder(WL.GameOrderEvent.Create(build.playerID, "Army Recruiter upgraded to level " .. tostring(build.toLevel), {}, {mod}, nil, nil));
+        else
+            -- The order was prepaid; refund if ownership was lost before construction resolved.
+            r.territories[build.territoryID] = build.fromLevel or nil;
+            if build.paid == true and (build.cost or 0) > 0 then AddResourceChange(resourceChanges, build.playerID, build.cost or 0); end
+        end
+    end
+end
+
+local function ProcessArmyRecruiterProduction(game, data, addNewOrder)
+    local r = EnsureArmyRecruiterState(data); if r == nil or r.enabled ~= true then return; end
+    local economy = data.globalEconomy; local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing == nil then return; end
+    for _, nation in pairs(economy.nations or {}) do nation.armyRecruiterCount=0; nation.armyRecruiterLevels=0; nation.armyRecruiterArmiesGeneratedThisTurn=0; end
+    local base = math.max(1, math.floor(tonumber(GetSetting("ArmyRecruiterArmiesPerTurn", 4)) or 4));
+    for territoryID, level in pairs(r.territories or {}) do
+        level = math.max(0, math.floor(tonumber(level) or 0));
+        local terr = standing.Territories[territoryID]; local owner = terr and terr.OwnerPlayerID or nil; local nation = owner and economy.nations[owner] or nil;
+        if level > 0 and nation ~= nil and nation.eliminated ~= true then
+            nation.armyRecruiterCount = (nation.armyRecruiterCount or 0) + 1; nation.armyRecruiterLevels = (nation.armyRecruiterLevels or 0) + level;
+            local readiness = math.max(0, math.min(100, tonumber(nation.resourceMilitaryReadiness) or 100));
+            local armies = math.max(0, math.floor(base * level * readiness / 100 + 0.5));
+            if armies > 0 then
+                addNewOrder(WL.GameOrderDeploy.Create(owner, armies, territoryID, true));
+                nation.armyRecruiterArmiesGeneratedThisTurn = (nation.armyRecruiterArmiesGeneratedThisTurn or 0) + armies;
+            end
+        end
+    end
 end
 
 local function ProcessStrategicResources(game, data, resourceChanges)
@@ -14220,6 +14515,18 @@ local function ProcessStrategicResources(game, data, resourceChanges)
     end
 
     for _, nation in pairs(economy.nations or {}) do
+        -- A nation's peacetime maintenance requirement is locked from its
+        -- original production profile.  Losing any of that strategic base can
+        -- therefore create a real shortage; later facilities/captures create
+        -- surplus instead of permanently raising the baseline.
+        if nation.resourceRequirementsInitialized ~= true then
+            nation.resourceRequirements = {};
+            for _, resourceName in ipairs(RESOURCE_NAMES) do
+                nation.resourceRequirements[resourceName] = nation.resourceProduction[resourceName] or 0;
+            end
+            nation.resourceRequirementsInitialized = true;
+        end
+
         for _, resourceName in ipairs(RESOURCE_NAMES) do
             nation.resourceEffective[resourceName] = nation.resourceProduction[resourceName] or 0;
         end
@@ -14329,63 +14636,30 @@ local function ProcessStrategicResources(game, data, resourceChanges)
                     )
                 );
 
-            -- Resource demand scales gently with national Commerce.
-            -- Uranium is intentionally strategic rather than a basic
-            -- peacetime requirement.
-            local demands = {
-                Oil =
-                    math.max(
-                        1,
-                        math.ceil(
-                            commerce / 500
-                        )
-                    ),
+            -- Fixed strategic maintenance baseline: the nation must maintain
+            -- the production level it began the resource system with.
+            local demands = {};
+            for _, resourceName in ipairs(RESOURCE_NAMES) do
+                demands[resourceName] = math.max(
+                    0,
+                    tonumber((nation.resourceRequirements or {})[resourceName]) or 0
+                );
+            end
 
-                Food =
-                    math.max(
-                        1,
-                        math.ceil(
-                            commerce / 450
-                        )
-                    ),
-
-                Iron =
-                    math.max(
-                        1,
-                        math.ceil(
-                            commerce / 800
-                        )
-                    ),
-
-                Gas =
-                    math.max(
-                        0,
-                        math.ceil(
-                            commerce / 1000
-                        )
-                        - 1
-                    ),
-
-                Coal =
-                    commerce >= 900
-                    and 1
-                    or 0,
-
-                Copper =
-                    commerce >= 700
-                    and 1
-                    or 0,
-
-                ["Rare Earths"] =
-                    commerce >= 1000
-                    and 1
-                    or 0,
-
-                Lithium =
-                    commerce >= 1300
-                    and 1
-                    or 0
-            };
+            -- Army Recruiter levels increase military maintenance requirements.
+            local recruiterState = EnsureArmyRecruiterState(data);
+            local recruiterLevels = 0;
+            if recruiterState ~= nil then
+                for territoryID, level in pairs(recruiterState.territories or {}) do
+                    local rt = standing.Territories[territoryID];
+                    if rt ~= nil and rt.OwnerPlayerID == playerID then recruiterLevels = recruiterLevels + math.max(0, tonumber(level) or 0); end
+                end
+            end
+            if recruiterLevels > 0 then
+                demands.Oil = (demands.Oil or 0) + recruiterLevels;
+                demands.Food = (demands.Food or 0) + recruiterLevels;
+                demands.Iron = (demands.Iron or 0) + recruiterLevels;
+            end
 
             local readinessPenalty =
                 0;
@@ -16320,6 +16594,51 @@ end
 
 
 -- =========================================================
+-- WAR BONDS
+-- =========================================================
+
+local function ProcessWarBonds(game, data, resourceChanges)
+    local economy = data.globalEconomy;
+    if economy == nil then return; end
+    economy.warBonds = economy.warBonds or {nextHoldingID = 1, holdings = {}, maturityTurns = 5, returnPercent = 20};
+    local market = economy.warBonds;
+    market.holdings = market.holdings or {};
+    local currentTurn = data.tradeTurn or economy.currentEconomyTurn or 0;
+    local available = {};
+
+    for _, holding in ipairs(market.holdings) do
+        if holding.status == "active" and currentTurn >= (holding.maturesTurn or currentTurn + 1) then
+            local issuerID = holding.issuerPlayerID;
+            local buyerID = holding.buyerPlayerID;
+            if available[issuerID] == nil then
+                available[issuerID] = math.max(0, GetStoredGold(game, issuerID));
+            end
+            local due = math.max(0, math.floor(tonumber(holding.payout) or 0));
+            local paid = math.min(due, available[issuerID] or 0);
+            if paid > 0 then
+                AddResourceChange(resourceChanges, issuerID, -paid);
+                AddResourceChange(resourceChanges, buyerID, paid);
+                available[issuerID] = math.max(0, (available[issuerID] or 0) - paid);
+            end
+            holding.paid = paid;
+            holding.status = paid >= due and "matured" or "defaulted";
+            holding.resolvedTurn = currentTurn;
+            local buyerNation = (economy.nations or {})[buyerID];
+            if buyerNation ~= nil then
+                buyerNation.warBondPayoutsReceived = (buyerNation.warBondPayoutsReceived or 0) + paid;
+            end
+            economy.market = economy.market or {};
+            economy.market.news = economy.market.news or {};
+            table.insert(economy.market.news, {
+                turn = currentTurn,
+                type = "war_bond",
+                message = "War Bond matured: " .. tostring(paid) .. "/" .. tostring(due) .. " Commerce paid."
+            });
+        end
+    end
+end
+
+-- =========================================================
 -- MAIN TURN HOOK
 -- =========================================================
 
@@ -16336,6 +16655,8 @@ function Server_AdvanceTurn_Start(
     ADVANCE_TURN_PERFORMANCE_CACHE = nil;
     ADVANCE_TURN_BORDER_CACHE = {};
     ADVANCE_TURN_ORDER_DATA_CACHE = data;
+    AI_WAR_BORDER_CACHE = nil;
+    AI_WAR_BORDER_CACHE_TURN = nil;
 
     data.tradeTurn =
         data.tradeTurn
@@ -16367,13 +16688,23 @@ function Server_AdvanceTurn_Start(
         addNewOrder
     );
 
+    ProcessPendingArmyRecruiters(game, data, resourceChanges, addNewOrder);
+
     ProcessStrategicResources(
         game,
         data,
         resourceChanges
     );
 
+    ProcessArmyRecruiterProduction(game, data, addNewOrder);
+
     ProcessUnitedNations(
+        game,
+        data,
+        resourceChanges
+    );
+
+    ProcessWarBonds(
         game,
         data,
         resourceChanges
@@ -16503,7 +16834,8 @@ function Server_AdvanceTurn_Start(
 
 ProcessMarketETF(
     game,
-    data
+    data,
+    resourceChanges
 );
 
 ProcessCompanyDividends(
@@ -16664,6 +16996,13 @@ end
                                 )
                             );
 
+                        nation.aiManagerTurnBudget = nation.aiManagerBudgetRemaining;
+                        nation.aiManagerSpentThisTurn = 0;
+                        nation.aiManagerMarketSpentThisTurn = 0;
+                        nation.aiManagerInvestmentSpentThisTurn = 0;
+                        nation.aiManagerCommerceBefore = availableGold;
+                        nation.aiManagerCommerceAfter = availableGold;
+
                         nation.aiStrategicState =
                             nation.aiStrategicState
                             or "stable";
@@ -16684,6 +17023,7 @@ end
 
                         if managerPhase == 0 then
 
+                            local before = nation.aiManagerBudgetRemaining or 0;
                             ProcessAIMarketSelling(
                                 game,
                                 data,
@@ -16697,9 +17037,12 @@ end
                                 resourceChanges,
                                 playerID
                             );
+                            local after = nation.aiManagerBudgetRemaining or 0;
+                            nation.aiManagerMarketSpentThisTurn = math.max(0, before - after);
 
                         else
 
+                            local before = nation.aiManagerBudgetRemaining or 0;
                             AIConsiderProjectCreation(
                                 game,
                                 data,
@@ -16713,8 +17056,15 @@ end
                                 playerID,
                                 resourceChanges
                             );
+                            local after = nation.aiManagerBudgetRemaining or 0;
+                            nation.aiManagerInvestmentSpentThisTurn = math.max(0, before - after);
 
                         end
+
+                        nation.aiManagerSpentThisTurn =
+                            math.max(0, (nation.aiManagerTurnBudget or 0) - (nation.aiManagerBudgetRemaining or 0));
+                        nation.aiManagerCommerceAfter =
+                            math.max(0, (nation.aiManagerCommerceBefore or 0) - (nation.aiManagerSpentThisTurn or 0));
 
                         nation.aiManagerLastProcessedTurn =
                             currentTurn;

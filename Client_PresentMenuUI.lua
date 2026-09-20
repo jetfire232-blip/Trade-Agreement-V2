@@ -265,6 +265,40 @@ function ShowComingSoonSection(
 end
 
 
+function ShowWarDeclarationReasonMenu(parent, game, targetPlayerID)
+    local area = CreateContentArea(parent);
+    UI.CreateLabel(area).SetText("DECLARE WAR");
+    UI.CreateLabel(area).SetText("Target: " .. tostring(GetPlayerName(game, targetPlayerID)));
+    UI.CreateLabel(area).SetText("Select the official reason for war. The cause will be recorded in Current Wars and diplomatic history.");
+
+    local reasons = {
+        "Territorial Dispute",
+        "Resource Security",
+        "National Defense / Border Threat",
+        "Support an Ally",
+        "Economic Conflict",
+        "Ideological Conflict"
+    };
+
+    for _, reason in ipairs(reasons) do
+        local capturedReason = reason;
+        UI.CreateButton(area).SetText(capturedReason).SetOnClick(function()
+            game.SendGameCustomMessage(
+                "Declaring war...",
+                {type="declareWar", targetPlayerID=targetPlayerID, reason=capturedReason},
+                function(result)
+                    if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
+                    ShowDiplomacyMenu(parent, game);
+                end
+            );
+        end);
+    end
+
+    UI.CreateButton(area).SetText("CANCEL").SetOnClick(function()
+        ShowDiplomacyMenu(parent, game);
+    end);
+end
+
 function ShowDiplomacyMenu(
     parent,
     game
@@ -950,6 +984,52 @@ end
             "CURRENT WARS"
         );
 
+    -- Coalition/faction view: a conflict can contain several nations on each
+    -- side while the underlying pairwise relationships still enforce attacks.
+    local conflicts = diplomacy.warConflicts or {};
+    local ourFactionID = (diplomacy.playerFaction or {})[ourID];
+    local ourFaction = ourFactionID and (diplomacy.factions or {})[ourFactionID] or nil;
+    for conflictID, conflict in pairs(conflicts) do
+        if conflict ~= nil and conflict.active ~= false then
+            local sideA = conflict.sideA or {};
+            local sideB = conflict.sideB or {};
+            local namesA = {};
+            local namesB = {};
+            for pid, _ in pairs(sideA) do table.insert(namesA, GetPlayerName(game, pid)); end
+            for pid, _ in pairs(sideB) do table.insert(namesB, GetPlayerName(game, pid)); end
+            table.sort(namesA); table.sort(namesB);
+            if #namesA > 0 and #namesB > 0 then
+                UI.CreateLabel(area).SetText(table.concat(namesA, ", ") .. " VS " .. table.concat(namesB, ", "));
+                UI.CreateLabel(area).SetText("Cause: " .. tostring(conflict.cause or "Territorial Dispute") .. " | Conflict #" .. tostring(conflictID));
+
+                local alreadyIn = sideA[ourID] == true or sideB[ourID] == true;
+                if not alreadyIn and ourFaction ~= nil then
+                    local canJoinA = false; local canJoinB = false;
+                    for memberID, _ in pairs(ourFaction.members or {}) do
+                        if sideA[memberID] then canJoinA = true; end
+                        if sideB[memberID] then canJoinB = true; end
+                    end
+                    if canJoinA then
+                        UI.CreateButton(area).SetText("JOIN WAR - SIDE A").SetOnClick(function()
+                            game.SendGameCustomMessage("Joining faction war...", {type="joinWar", conflictID=conflictID, side="A"}, function(result)
+                                if result and result.message then UI.Alert(result.message); end
+                                ShowDiplomacyMenu(parent, game);
+                            end);
+                        end);
+                    elseif canJoinB then
+                        UI.CreateButton(area).SetText("JOIN WAR - SIDE B").SetOnClick(function()
+                            game.SendGameCustomMessage("Joining faction war...", {type="joinWar", conflictID=conflictID, side="B"}, function(result)
+                                if result and result.message then UI.Alert(result.message); end
+                                ShowDiplomacyMenu(parent, game);
+                            end);
+                        end);
+                    end
+                end
+                UI.CreateLabel(area).SetText("----------------------------------------");
+            end
+        end
+    end
+
     local warStats =
         diplomacy.warStats
         or {};
@@ -1040,6 +1120,11 @@ end
                     "Started Turn " .. tostring(startTurn)
                     .. " | Duration: " .. tostring(duration) .. " turn(s)"
                     .. " | Attacks: " .. tostring(stats.attacks or 0)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Cause: " .. tostring(stats.reason or relationship.warReason or "Territorial Dispute")
                 );
 
             UI.CreateLabel(area)
@@ -1456,31 +1541,11 @@ if pendingWar == nil
                             "DECLARE WAR"
                         )
                         .SetOnClick(function()
-
-
-                            game.SendGameCustomMessage(
-                                "Declaring war...",
-                                {
-
-                                    type =
-                                        "declareWar",
-
-                                    targetPlayerID =
-                                        playerID
-                                },
-
-                                function(
-                                    result
-                                )
-
-                                    ShowDiplomacyMenu(
-                                        parent,
-                                        game
-                                    );
-
-                                end
+                            ShowWarDeclarationReasonMenu(
+                                parent,
+                                game,
+                                playerID
                             );
-
                         end);
                 end
 
@@ -4151,8 +4216,26 @@ function ShowResourcesMenu(parent, game)
 
     UI.CreateLabel(area).SetText("Production / Turn");
     UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceProduction));
+    UI.CreateLabel(area).SetText("Required to Maintain Normal Operations");
+    UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceRequirements));
     UI.CreateLabel(area).SetText("Effective After Trades");
     UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceEffective));
+
+    UI.CreateLabel(area).SetText("RESOURCE BALANCE");
+    for _, resourceName in ipairs(RESOURCE_UI_TYPES) do
+        if ResourceTypeAvailable(resourceName) then
+            local have = ((nation.resourceEffective or {})[resourceName] or 0);
+            local need = ((nation.resourceRequirements or {})[resourceName] or 0);
+            local recruiterLevels = nation.armyRecruiterLevels or 0;
+            if resourceName == "Oil" or resourceName == "Food" or resourceName == "Iron" then
+                need = need + recruiterLevels;
+            end
+            local balance = have - need;
+            local status = balance < 0 and "SHORTAGE" or (balance > 0 and "SURPLUS" or "STABLE");
+            local prefix = balance > 0 and "+" or "";
+            UI.CreateLabel(area).SetText(resourceName .. ": " .. tostring(have) .. "/" .. tostring(need) .. " | " .. prefix .. tostring(balance) .. " " .. status);
+        end
+    end
 
     local penalty = nation.resourcePenaltyPercent or 0;
     local readiness = nation.resourceMilitaryReadiness or 100;
@@ -4186,7 +4269,7 @@ function ShowResourcesMenu(parent, game)
     UI.CreateLabel(area).SetText("----------------------------------------");
     UI.CreateLabel(area).SetText("DEVELOP RESOURCE FACILITY");
     UI.CreateLabel(area).SetText(
-        "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn. The territory keeps ONE resource icon; its dominant resource controls the icon design and the badge shows total facility/deposit level."
+        "Choose a resource, then click SELECT TERRITORY. Commerce is deducted immediately when you confirm the territory; construction applies on the next turn. If ownership is lost before construction resolves, the prepaid cost is refunded."
     );
 
     local facilityBaseCost =
@@ -4218,14 +4301,14 @@ function ShowResourcesMenu(parent, game)
         );
 
     local costParts = {
-        "New facility: " .. tostring(facilityBaseCost * 3) .. " gold"
+        "New facility: " .. tostring(facilityBaseCost * 3) .. " Commerce"
     };
 
     for level = 1, facilityMaxLevel - 1 do
         table.insert(
             costParts,
             "Level " .. tostring(level) .. " -> " .. tostring(level + 1)
-                .. ": " .. tostring(facilityBaseCost * (level + 1)) .. " gold"
+                .. ": " .. tostring(facilityBaseCost * (level + 1)) .. " Commerce"
         );
     end
 
@@ -4274,6 +4357,31 @@ function ShowResourcesMenu(parent, game)
                 );
             end);
         end);
+
+    if GetClientSetting("ArmyRecruitersEnabled", true) == true then
+        UI.CreateLabel(area).SetText("----------------------------------------");
+        UI.CreateLabel(area).SetText("ARMY RECRUITERS").SetColor("#D4AF37");
+        local recruiterCost = math.max(25, math.floor(tonumber(GetClientSetting("ArmyRecruiterBaseCost",250)) or 250));
+        local recruiterMax = math.max(1, math.floor(tonumber(GetClientSetting("ArmyRecruiterMaxPerPlayer",3)) or 3));
+        local recruiterArmies = math.max(1, math.floor(tonumber(GetClientSetting("ArmyRecruiterArmiesPerTurn",4)) or 4));
+        local recruiterMaxLevel = math.max(1, math.floor(tonumber(GetClientSetting("ArmyRecruiterMaxLevel",3)) or 3));
+        UI.CreateLabel(area).SetText("Recruiter Territories: " .. tostring(nation.armyRecruiterCount or 0) .. "/" .. tostring(recruiterMax) .. " | Total Levels: " .. tostring(nation.armyRecruiterLevels or 0));
+        UI.CreateLabel(area).SetText("Base Output: " .. tostring(recruiterArmies) .. " armies per level/turn | Readiness: " .. tostring(nation.resourceMilitaryReadiness or 100) .. "% | Generated Last Turn: " .. tostring(nation.armyRecruiterArmiesGeneratedThisTurn or 0));
+        UI.CreateLabel(area).SetText("Maintenance: each recruiter level adds +1 Oil, +1 Food and +1 Iron to required production. Recruiters transfer with captured territory.");
+        local rcosts = {}; for lvl=1,recruiterMaxLevel do table.insert(rcosts, "L" .. tostring(lvl) .. ": " .. tostring(recruiterCost*lvl)); end
+        UI.CreateLabel(area).SetText("Build / Upgrade Costs | " .. table.concat(rcosts, " | ") .. " Commerce (deducted immediately)");
+        local recruiterStatus = UI.CreateLabel(area).SetText("");
+        UI.CreateButton(area).SetText("SELECT TERRITORY TO BUILD / UPGRADE RECRUITER").SetOnClick(function()
+            recruiterStatus.SetText("Select one of your territories.");
+            UI.InterceptNextTerritoryClick(function(terrDetails)
+                if terrDetails == nil then recruiterStatus.SetText("Territory selection canceled."); return; end
+                game.SendGameCustomMessage("Building Army Recruiter...", {type="buildArmyRecruiter", territoryID=terrDetails.ID}, function(result)
+                    if result and result.message then UI.Alert(result.message); end
+                    ShowResourcesMenu(parent, game);
+                end);
+            end);
+        end);
+    end
 
     if GetClientSetting("ResourceTradingEnabled", true) == true then
         UI.CreateLabel(area).SetText("----------------------------------------");
@@ -8554,6 +8662,46 @@ if mostTradedCompany ~= nil
     );
 
 end
+UI.CreateLabel(area).SetText("----------------------------------------");
+UI.CreateLabel(area).SetText("TOP 5 GAINERS / TOP 5 DECLINERS");
+
+local rankedMoves = {};
+for _, company in pairs(companies) do
+    if company.active == true and company.delisted ~= true then
+        local cp = company.currentPrice or company.startingPrice or 1;
+        local pp = company.previousPrice or cp;
+        local pct = pp > 0 and ((cp - pp) / pp * 100) or 0;
+        table.insert(rankedMoves, {company=company, pct=pct});
+    end
+end
+table.sort(rankedMoves, function(a,b) return a.pct > b.pct; end);
+
+UI.CreateLabel(area).SetText("TOP 5 STOCKS").SetColor("#32CD32");
+for i=1,math.min(5,#rankedMoves) do
+    local entry = rankedMoves[i];
+    local company = entry.company;
+    local ownerNation = (economy.nations or {})[company.ownerPlayerID] or {};
+    UI.CreateLabel(area).SetText(
+        tostring(i) .. ". " .. tostring(company.name or "Company") ..
+        " | " .. string.format("%+.1f%%", entry.pct) ..
+        " | Confidence " .. tostring(math.floor((company.confidence or 50)+0.5)) .. "%" ..
+        " | Unrest " .. tostring(math.floor((ownerNation.resourceUnrest or 0)+0.5))
+    );
+end
+
+UI.CreateLabel(area).SetText("TOP 5 DOWNTREND STOCKS").SetColor("#FF4C4C");
+for offset=0,math.min(4,#rankedMoves-1) do
+    local entry = rankedMoves[#rankedMoves-offset];
+    local company = entry.company;
+    local ownerNation = (economy.nations or {})[company.ownerPlayerID] or {};
+    UI.CreateLabel(area).SetText(
+        tostring(offset+1) .. ". " .. tostring(company.name or "Company") ..
+        " | " .. string.format("%+.1f%%", entry.pct) ..
+        " | Confidence " .. tostring(math.floor((company.confidence or 50)+0.5)) .. "%" ..
+        " | Unrest " .. tostring(math.floor((ownerNation.resourceUnrest or 0)+0.5))
+    );
+end
+
 -- =========================================
 -- GLOBAL MARKET ETF OVERVIEW
 -- =========================================
@@ -8738,7 +8886,13 @@ function ShowMarketNews(
                     )
                 );
 
-        if entry.type == "stock_split" then
+        if entry.type == "war_bond" then
+
+            headline.SetColor(
+                "#D4AF37"
+            );
+
+        elseif entry.type == "stock_split" then
 
             headline.SetColor(
                 "#D4AF37"
@@ -8756,7 +8910,7 @@ function ShowMarketNews(
         "#D4AF37"
     );
 
-elseif entry.type == "etf_dividend" then
+elseif entry.type == "etf_dividend" or entry.type == "etf_bonus" then
 
     headline.SetColor(
         "#32CD32"
@@ -8954,6 +9108,17 @@ UI.CreateLabel(area)
         " Commerce"
     );
 
+    local currentTurn = economy.currentEconomyTurn or data.tradeTurn or 0;
+    local lastRebalance = etf.lastRebalanceTurn or 0;
+    local turnsUntil = math.max(0, 5 - (currentTurn - lastRebalance));
+    UI.CreateLabel(area).SetText(
+        "ETF Rebalance: every 5 turns | Next in " .. tostring(turnsUntil) .. " turn(s)"
+    );
+    UI.CreateLabel(area).SetText(
+        "Your ETF 5-Turn Bonus This Cycle: +" .. tostring(nation.etfBonusThisTurn or 0) ..
+        " Commerce | Lifetime ETF Rebalance Bonuses: " .. tostring(nation.etfRebalanceBonusesReceived or 0)
+    );
+
     -- =========================================
     -- ETF MEMBERS
     -- =========================================
@@ -9032,6 +9197,51 @@ UI.CreateLabel(area)
 
     end
 
+
+    -- =========================================
+    -- WAR BONDS
+    -- =========================================
+
+    UI.CreateLabel(area).SetText("----------------------------------------");
+    UI.CreateLabel(area).SetText("WAR BONDS").SetColor("#D4AF37");
+    UI.CreateLabel(area).SetText("Finance a nation currently at war. Bonds mature in 5 turns at a 20% target return; repayment depends on issuer Commerce at maturity.");
+    local diplomacy = economy.diplomacy or {};
+    local atWar = {};
+    for _, rel in pairs(diplomacy.relationships or {}) do
+        if rel ~= nil and rel.status == "war" then
+            if rel.player1 ~= nil then atWar[rel.player1] = true; end
+            if rel.player2 ~= nil then atWar[rel.player2] = true; end
+        end
+    end
+    local shownIssuers = 0;
+    for issuerID, _ in pairs(atWar) do
+        if shownIssuers < 8 then
+            shownIssuers = shownIssuers + 1;
+            local capturedIssuerID = issuerID;
+            UI.CreateLabel(area).SetText("Issuer: " .. GetPlayerName(game, capturedIssuerID));
+            local bondRow = UI.CreateHorizontalLayoutGroup(area);
+            for _, amount in ipairs({100,250,500,1000}) do
+                local capturedAmount = amount;
+                UI.CreateButton(bondRow).SetText(tostring(capturedAmount)).SetOnClick(function()
+                    game.SendGameCustomMessage("Buying War Bond...", {type="buyWarBond", issuerPlayerID=capturedIssuerID, amount=capturedAmount}, function(result)
+                        if result and result.message then UI.Alert(result.message); end
+                        ShowMarketETF(parent, game);
+                    end);
+                end);
+            end
+        end
+    end
+    if shownIssuers == 0 then UI.CreateLabel(area).SetText("No active-war issuers are available right now."); end
+
+    local ourWarBondCount = 0;
+    local ourWarBondPrincipal = 0;
+    for _, holding in ipairs(((economy.warBonds or {}).holdings or {})) do
+        if holding.buyerPlayerID == game.Us.ID and holding.status == "active" then
+            ourWarBondCount = ourWarBondCount + 1;
+            ourWarBondPrincipal = ourWarBondPrincipal + (holding.principal or 0);
+        end
+    end
+    UI.CreateLabel(area).SetText("Your Active War Bonds: " .. tostring(ourWarBondCount) .. " | Principal: " .. tostring(ourWarBondPrincipal) .. " Commerce");
 
     -- =========================================
     -- PLAYER ETF POSITION
@@ -11560,6 +11770,17 @@ function ShowAIManagerMenu(
                     or 0
                 )
             );
+
+        UI.CreateLabel(area).SetText(
+            "AI Manager This Turn | Starting Commerce: " .. tostring(nation.aiManagerCommerceBefore or 0) ..
+            " | Budget: " .. tostring(nation.aiManagerTurnBudget or 0) ..
+            " | Spent: -" .. tostring(nation.aiManagerSpentThisTurn or 0) ..
+            " | Projected Commerce After Manager: " .. tostring(nation.aiManagerCommerceAfter or 0)
+        );
+        UI.CreateLabel(area).SetText(
+            "Spending Breakdown | Markets: " .. tostring(nation.aiManagerMarketSpentThisTurn or 0) ..
+            " | Investments/Projects: " .. tostring(nation.aiManagerInvestmentSpentThisTurn or 0)
+        );
 
     end
 

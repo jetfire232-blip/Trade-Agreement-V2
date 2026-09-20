@@ -233,6 +233,12 @@ local function CreateDefaultNationState(
     nation.etfDividendsReceived =
         0;
 
+    nation.etfRebalanceBonusesReceived =
+        0;
+
+    nation.etfBonusThisTurn =
+        0;
+
 
     -- =====================================================
     -- BONDS
@@ -307,6 +313,24 @@ local function CreateDefaultNationState(
     nation.aiManagerLastProcessedTurn =
         0;
 
+    nation.aiManagerTurnBudget =
+        0;
+
+    nation.aiManagerSpentThisTurn =
+        0;
+
+    nation.aiManagerMarketSpentThisTurn =
+        0;
+
+    nation.aiManagerInvestmentSpentThisTurn =
+        0;
+
+    nation.aiManagerCommerceBefore =
+        0;
+
+    nation.aiManagerCommerceAfter =
+        0;
+
 
     -- =====================================================
     -- STRATEGIC RESOURCES
@@ -327,6 +351,12 @@ local function CreateDefaultNationState(
     nation.resourceShortages =
         {};
 
+    nation.resourceRequirements =
+        {};
+
+    nation.resourceRequirementsInitialized =
+        false;
+
     nation.resourcePenaltyPercent =
         0;
 
@@ -338,6 +368,10 @@ local function CreateDefaultNationState(
 
     nation.resourceBuildReservedGold =
         0;
+
+    nation.armyRecruiterCount = 0;
+    nation.armyRecruiterLevels = 0;
+    nation.armyRecruiterArmiesGeneratedThisTurn = 0;
 
 
     -- =====================================================
@@ -486,6 +520,14 @@ local function CreateGlobalState()
             bonds = {},
             transactions = {},
             nextBondID = 1
+        };
+
+    data.warBonds =
+        {
+            nextHoldingID = 1,
+            holdings = {},
+            maturityTurns = 5,
+            returnPercent = 20
         };
 
 
@@ -1051,6 +1093,8 @@ function Server_StartGame(
 
     data.globalEconomy =
         economy;
+
+    economy.armyRecruiters = economy.armyRecruiters or {enabled = true, territories = {}, pendingBuilds = {}};
 
     Mod.PublicGameData =
         data;

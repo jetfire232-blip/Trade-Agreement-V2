@@ -431,6 +431,12 @@ function Client_SaveConfigureUI(
             "ResourceMapIconsEnabled"
         );
 
+    local armyRecruitersEnabled = ReadBool("ArmyRecruitersEnabled");
+    local armyRecruiterBaseCost = ReadNumber("ArmyRecruiterBaseCost");
+    local armyRecruiterMaxPerPlayer = ReadNumber("ArmyRecruiterMaxPerPlayer");
+    local armyRecruiterArmiesPerTurn = ReadNumber("ArmyRecruiterArmiesPerTurn");
+    local armyRecruiterMaxLevel = ReadNumber("ArmyRecruiterMaxLevel");
+
 
     -- =====================================================
     -- SMART AI
@@ -1210,6 +1216,12 @@ function Client_SaveConfigureUI(
 
     Mod.Settings.ResourceMapIconsEnabled =
         resourceMapIconsEnabled;
+
+    Mod.Settings.ArmyRecruitersEnabled = armyRecruitersEnabled;
+    Mod.Settings.ArmyRecruiterBaseCost = math.max(25, math.min(2000, armyRecruiterBaseCost or 250));
+    Mod.Settings.ArmyRecruiterMaxPerPlayer = math.max(1, math.min(10, armyRecruiterMaxPerPlayer or 3));
+    Mod.Settings.ArmyRecruiterArmiesPerTurn = math.max(1, math.min(25, armyRecruiterArmiesPerTurn or 4));
+    Mod.Settings.ArmyRecruiterMaxLevel = math.max(1, math.min(5, armyRecruiterMaxLevel or 3));
 
 
     -- =====================================================

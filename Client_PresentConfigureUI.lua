@@ -642,6 +642,12 @@ function Client_PresentConfigureUI(rootParent)
             true
         );
 
+    local armyRecruitersEnabled = GetBoolSetting(settings, "ArmyRecruitersEnabled", true);
+    local armyRecruiterBaseCost = GetNumberSetting(settings, "ArmyRecruiterBaseCost", 250);
+    local armyRecruiterMaxPerPlayer = GetNumberSetting(settings, "ArmyRecruiterMaxPerPlayer", 3);
+    local armyRecruiterArmiesPerTurn = GetNumberSetting(settings, "ArmyRecruiterArmiesPerTurn", 4);
+    local armyRecruiterMaxLevel = GetNumberSetting(settings, "ArmyRecruiterMaxLevel", 3);
+
 
     -- =====================================================
     -- SMART AI SETTINGS
@@ -1344,6 +1350,14 @@ function Client_PresentConfigureUI(rootParent)
             "Initial V3 UN resolutions: Sanctions, Embargo, Aid, Condemnation, and Ceasefire. Only Security Council members vote. Permanent members have veto power."
         );
 
+
+    AddSection(root, "ARMY RECRUITERS");
+
+    AddCheckBox(root, "ArmyRecruitersEnabled", "Enable Army Recruiters", armyRecruitersEnabled);
+    AddNumberInput(root, "ArmyRecruiterBaseCost", "Army Recruiter Base Cost (Commerce)", armyRecruiterBaseCost, 25, 2000, "Commerce is deducted immediately when a recruiter is built or upgraded.");
+    AddNumberInput(root, "ArmyRecruiterMaxPerPlayer", "Maximum Recruiter Territories per Player", armyRecruiterMaxPerPlayer, 1, 10, "Captured recruiters can put a nation above this limit, but it cannot build another until below the limit.");
+    AddNumberInput(root, "ArmyRecruiterArmiesPerTurn", "Base Armies per Recruiter Level / Turn", armyRecruiterArmiesPerTurn, 1, 25, "Actual output is multiplied by Military Readiness.");
+    AddNumberInput(root, "ArmyRecruiterMaxLevel", "Maximum Recruiter Level", armyRecruiterMaxLevel, 1, 5, "Upgrades increase army output and strategic resource maintenance demand.");
 
     -- =====================================================
     -- SMART AI

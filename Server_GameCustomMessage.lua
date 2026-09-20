@@ -4451,6 +4451,19 @@ nation.stockCostBasis[
 
 
     -- =====================================================
+    -- WAR REASON HELPERS
+    -- =====================================================
+
+    local allowedWarReasons = {
+        ["Territorial Dispute"] = true,
+        ["Resource Security"] = true,
+        ["National Defense / Border Threat"] = true,
+        ["Support an Ally"] = true,
+        ["Economic Conflict"] = true,
+        ["Ideological Conflict"] = true
+    };
+
+    -- =====================================================
     -- DECLARE WAR
     -- =====================================================
 
@@ -4462,6 +4475,11 @@ nation.stockCostBasis[
             MakeInteger(
                 payload.targetPlayerID
             );
+
+        local warReason = tostring(payload.reason or "Territorial Dispute");
+        if allowedWarReasons[warReason] ~= true then
+            warReason = "Territorial Dispute";
+        end
 
 
         if targetPlayerID == nil then
@@ -4761,6 +4779,19 @@ end
         end
 
 
+        diplomacy.warConflicts = diplomacy.warConflicts or {};
+        diplomacy.nextWarConflictID = diplomacy.nextWarConflictID or 1;
+        local conflictID = diplomacy.nextWarConflictID;
+        diplomacy.nextWarConflictID = conflictID + 1;
+        diplomacy.warConflicts[conflictID] = {
+            id = conflictID,
+            cause = warReason,
+            startTurn = currentTurn,
+            active = declarationDelay == 0,
+            sideA = {[playerID] = true},
+            sideB = {[targetPlayerID] = true}
+        };
+
         local declarerName =
             GetPlayerName(
                 game,
@@ -4786,6 +4817,8 @@ end
                 declarerName ..
                 " declared war on " ..
                 targetName ..
+                ". Cause: " ..
+                warReason ..
                 ".";
 
 
@@ -4819,6 +4852,9 @@ end
                 }
             );
 
+
+            relationship.warReason = warReason;
+            relationship.warConflictID = conflictID;
 
             EnterWar(
                 data,
@@ -4892,7 +4928,13 @@ end
                 declarationDelay,
 
             active =
-                true
+                true,
+
+            warReason =
+                warReason,
+
+            conflictID =
+                conflictID
         };
 
 
@@ -4911,11 +4953,19 @@ end
         relationship.warActivatesTurn =
             activatesTurn;
 
+        relationship.warReason =
+            warReason;
+
+        relationship.warConflictID =
+            conflictID;
+
 
         local declarationMessage =
             declarerName ..
             " declared war on " ..
             targetName ..
+            ". Cause: " ..
+            warReason ..
             ". Hostilities will officially begin in " ..
             tostring(
                 declarationDelay
@@ -4991,6 +5041,124 @@ end
 
         return;
     end 
+    -- =====================================================
+    -- JOIN EXISTING WAR / FACTION COALITION
+    -- =====================================================
+
+    if payload.type == "joinWar" then
+        local conflictID = MakeInteger(payload.conflictID);
+        local side = tostring(payload.side or "");
+        local diplomacy = GetDiplomacyData(data);
+        diplomacy.warConflicts = diplomacy.warConflicts or {};
+        local conflict = conflictID and diplomacy.warConflicts[conflictID] or nil;
+        if conflict == nil or conflict.active == false or (side ~= "A" and side ~= "B") then
+            setReturn({success=false, message="That war is no longer available to join."});
+            return;
+        end
+
+        conflict.sideA = conflict.sideA or {};
+        conflict.sideB = conflict.sideB or {};
+        if conflict.sideA[playerID] == true or conflict.sideB[playerID] == true then
+            setReturn({success=false, message="Your nation is already participating in this war."});
+            return;
+        end
+
+        local ownFactionID = (diplomacy.playerFaction or {})[playerID];
+        local eligible = false;
+        if ownFactionID ~= nil then
+            local faction = (diplomacy.factions or {})[ownFactionID];
+            for memberID, _ in pairs((faction and faction.members) or {}) do
+                if (side == "A" and conflict.sideA[memberID]) or (side == "B" and conflict.sideB[memberID]) then
+                    eligible = true;
+                end
+            end
+        end
+        if not eligible then
+            setReturn({success=false, message="You may join a side only when one of your Faction members is already fighting on that side."});
+            return;
+        end
+
+        local ourSide = side == "A" and conflict.sideA or conflict.sideB;
+        local enemySide = side == "A" and conflict.sideB or conflict.sideA;
+        ourSide[playerID] = true;
+        local currentTurn = GetCurrentEconomyTurn(data);
+        for enemyID, _ in pairs(enemySide) do
+            if PlayerAvailable(game, enemyID) then
+                local rel = GetRelationship(data, playerID, enemyID);
+                rel.status = "war";
+                rel.sinceTurn = currentTurn;
+                rel.lastChangedTurn = currentTurn;
+                rel.lastWarTurn = currentTurn;
+                rel.warReason = "Support an Ally";
+                rel.warConflictID = conflictID;
+                diplomacy.warStats = diplomacy.warStats or {};
+                local warKey = PairKey(playerID, enemyID);
+                diplomacy.warStats[warKey] = diplomacy.warStats[warKey] or {
+                    key=warKey, player1=playerID, player2=enemyID, startTurn=currentTurn, active=true,
+                    reason="Support an Ally", conflictID=conflictID, attacks=0,
+                    casualties={[tostring(playerID)]=0,[tostring(enemyID)]=0},
+                    territoriesCaptured={[tostring(playerID)]=0,[tostring(enemyID)]=0},
+                    economicImpact={[tostring(playerID)]=0,[tostring(enemyID)]=0}
+                };
+                RemoveTradeAgreementBetween(data, playerID, enemyID, GetPlayerName(game, playerID) .. " joined a faction war against " .. GetPlayerName(game, enemyID) .. ".");
+            end
+        end
+        AddDiplomacyHistory(data, "war_joined", playerID, 0, GetPlayerName(game, playerID) .. " joined the conflict in support of a Faction ally.", {conflictID=conflictID, side=side});
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="Your nation joined the war on Side " .. side .. "."});
+        return;
+    end
+
+    -- =====================================================
+    -- WAR BOND PURCHASE
+    -- =====================================================
+
+    if payload.type == "buyWarBond" then
+        local issuerID = MakeInteger(payload.issuerPlayerID);
+        local amount = MakeInteger(payload.amount);
+        if issuerID == nil or amount == nil or (amount ~= 100 and amount ~= 250 and amount ~= 500 and amount ~= 1000) then
+            setReturn({success=false, message="Invalid War Bond purchase."});
+            return;
+        end
+        local diplomacy = GetDiplomacyData(data);
+        local atWar = false;
+        for _, rel in pairs(diplomacy.relationships or {}) do
+            if rel ~= nil and rel.status == "war" and (rel.player1 == issuerID or rel.player2 == issuerID) then
+                atWar = true; break;
+            end
+        end
+        if not atWar then
+            setReturn({success=false, message="War Bonds can only be purchased from a nation currently at war."});
+            return;
+        end
+        if GetStoredGold(game, playerID) < amount then
+            setReturn({success=false, message="You need " .. tostring(amount) .. " Commerce to buy this War Bond."});
+            return;
+        end
+        if not RemoveGold(game, playerID, amount) then
+            setReturn({success=false, message="Unable to deduct the War Bond purchase."});
+            return;
+        end
+        AddGold(game, issuerID, amount);
+        local economy = data.globalEconomy or {};
+        economy.warBonds = economy.warBonds or {nextHoldingID=1, holdings={}, maturityTurns=5, returnPercent=20};
+        local market = economy.warBonds;
+        market.holdings = market.holdings or {};
+        market.nextHoldingID = market.nextHoldingID or 1;
+        local currentTurn = GetCurrentEconomyTurn(data);
+        local duration = math.max(1, tonumber(market.maturityTurns) or 5);
+        local rate = math.max(0, tonumber(market.returnPercent) or 20);
+        table.insert(market.holdings, {
+            id=market.nextHoldingID, buyerPlayerID=playerID, issuerPlayerID=issuerID, principal=amount,
+            purchasedTurn=currentTurn, maturesTurn=currentTurn+duration, payout=math.floor(amount*(1+rate/100)+0.5), status="active"
+        });
+        market.nextHoldingID = market.nextHoldingID + 1;
+        data.globalEconomy = economy;
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="War Bond purchased for " .. tostring(amount) .. " Commerce. It matures in " .. tostring(duration) .. " turns for " .. tostring(math.floor(amount*(1+rate/100)+0.5)) .. " Commerce if the issuer can repay."});
+        return;
+    end
+
     -- =====================================================
     -- SEND PEACE OFFER
     -- =====================================================
@@ -11071,6 +11239,48 @@ end
 
 
     -- =====================================================
+    -- ARMY RECRUITER DEVELOPMENT
+    -- =====================================================
+
+    if payload.type == "buildArmyRecruiter" then
+        if GetSetting("ArmyRecruitersEnabled", true) ~= true then
+            setReturn({success=false, message="Army Recruiters are disabled by the host."}); return;
+        end
+        local territoryID = MakeInteger(payload.territoryID);
+        local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+        local terr = territoryID and standing and standing.Territories and standing.Territories[territoryID] or nil;
+        if terr == nil or terr.OwnerPlayerID ~= playerID then
+            setReturn({success=false, message="Select a territory you currently own."}); return;
+        end
+        data.globalEconomy.armyRecruiters = data.globalEconomy.armyRecruiters or {enabled=true, territories={}, pendingBuilds={}};
+        local recruiters = data.globalEconomy.armyRecruiters;
+        recruiters.territories = recruiters.territories or {}; recruiters.pendingBuilds = recruiters.pendingBuilds or {};
+        local currentLevel = tonumber(recruiters.territories[territoryID]) or 0;
+        local maxLevel = math.max(1, math.floor(tonumber(GetSetting("ArmyRecruiterMaxLevel", 3)) or 3));
+        if currentLevel >= maxLevel then setReturn({success=false, message="This Army Recruiter is already at maximum level."}); return; end
+        local maxPerPlayer = math.max(1, math.floor(tonumber(GetSetting("ArmyRecruiterMaxPerPlayer", 3)) or 3));
+        if currentLevel <= 0 then
+            local count = 0;
+            for tid, level in pairs(recruiters.territories) do
+                local st = standing.Territories[tid];
+                if (tonumber(level) or 0) > 0 and st ~= nil and st.OwnerPlayerID == playerID then count = count + 1; end
+            end
+            if count >= maxPerPlayer then setReturn({success=false, message="You already control the maximum of " .. tostring(maxPerPlayer) .. " Army Recruiter territories."}); return; end
+        end
+        local newLevel = currentLevel + 1;
+        local baseCost = math.max(25, math.floor(tonumber(GetSetting("ArmyRecruiterBaseCost", 250)) or 250));
+        local cost = baseCost * newLevel;
+        if GetStoredGold(game, playerID) < cost then setReturn({success=false, message="You need " .. tostring(cost) .. " Commerce for Army Recruiter level " .. tostring(newLevel) .. "."}); return; end
+        RemoveGold(game, playerID, cost);
+        table.insert(recruiters.pendingBuilds, {playerID=playerID, territoryID=territoryID, fromLevel=currentLevel, toLevel=newLevel, cost=cost, paid=true, requestedTurn=data.tradeTurn or 0});
+        -- Reserve the level immediately to prevent duplicate purchases before the next turn.
+        recruiters.territories[territoryID] = newLevel;
+        Mod.PublicGameData = data;
+        setReturn({success=true, message="Army Recruiter level " .. tostring(newLevel) .. " scheduled. " .. tostring(cost) .. " Commerce was deducted immediately."});
+        return;
+    end
+
+    -- =====================================================
     -- RESOURCE FACILITY DEVELOPMENT
     -- =====================================================
 
@@ -11107,6 +11317,13 @@ end
         local nodes = resourceData.territories[territoryID];
         local currentLevel = nodes and nodes[resourceName] or 0;
 
+        for _, pending in ipairs(resourceData.pendingBuilds or {}) do
+            if pending.playerID == playerID and pending.territoryID == territoryID and pending.resource == resourceName then
+                setReturn({success=false, message="A " .. resourceName .. " facility build/upgrade is already scheduled on this territory."});
+                return;
+            end
+        end
+
         local maxLevel = math.max(1, math.floor(tonumber(GetSetting("ResourceFacilityMaxLevel", 3)) or 3));
         if currentLevel >= maxLevel then
             setReturn({success=false, message=resourceName .. " facility is already at maximum level."});
@@ -11120,13 +11337,14 @@ end
             or (baseCost * newLevel);
         local nation = EnsureNation(data, game, playerID);
         EnsureNationResourceFields(nation);
-        local availableGold = GetStoredGold(game, playerID) - (nation.resourceBuildReservedGold or 0);
+        local availableGold = GetStoredGold(game, playerID);
         if availableGold < cost then
-            setReturn({success=false, message="You need " .. tostring(cost) .. " gold to upgrade this facility to level " .. tostring(newLevel) .. "."});
+            setReturn({success=false, message="You need " .. tostring(cost) .. " Commerce to develop this facility to level " .. tostring(newLevel) .. "."});
             return;
         end
 
-        nation.resourceBuildReservedGold = (nation.resourceBuildReservedGold or 0) + cost;
+        -- Phase 10: pay at the moment the player confirms construction.
+        RemoveGold(game, playerID, cost);
         table.insert(resourceData.pendingBuilds, {
             playerID = playerID,
             territoryID = territoryID,
@@ -11134,12 +11352,13 @@ end
             fromLevel = currentLevel,
             toLevel = newLevel,
             cost = cost,
+            paid = true,
             requestedTurn = data.tradeTurn or 0
         });
 
         Mod.PublicGameData = data;
         local actionText = currentLevel <= 0 and "facility construction" or "facility upgrade";
-        setReturn({success=true, message=resourceName .. " " .. actionText .. " scheduled for next turn. Cost: " .. tostring(cost) .. " gold."});
+        setReturn({success=true, message=resourceName .. " " .. actionText .. " scheduled for next turn. " .. tostring(cost) .. " Commerce was deducted immediately."});
         return;
     end
 
