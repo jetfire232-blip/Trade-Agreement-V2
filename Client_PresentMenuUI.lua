@@ -170,9 +170,14 @@ PlayerTabVisibility = PlayerTabVisibility or {
     investments = true,
     markets = true,
     taxation = true,
+    resources = true,
+    unitedNations = true,
     globalEconomy = true,
     howItWorks = true
 };
+
+if PlayerTabVisibility.resources == nil then PlayerTabVisibility.resources = true; end
+if PlayerTabVisibility.unitedNations == nil then PlayerTabVisibility.unitedNations = true; end
 
 ActiveMainTab = ActiveMainTab or "overview";
 MainTabsArea = nil;
@@ -2794,11 +2799,747 @@ end
 
 function ShowUnitedNationsMenu(parent, game)
 
-    ShowComingSoonSection(
-        parent,
-        "UNITED NATIONS",
-        "Active Vote | Proposals | Resolutions | Public Enemy | Leadership | Sanctions | Aid | History\n\nThe UN will use simple YES / NO voting, optional reasons, discussion, vote graphs, sanctions, aid, Public Enemy rules, and leadership succession."
+    local area =
+        CreateContentArea(
+            parent
+        );
+
+    local data =
+        Mod.PublicGameData
+        or {};
+
+    local economy =
+        data.globalEconomy
+        or {};
+
+    local un =
+        economy.unitedNations
+        or data.unitedNations
+        or {};
+
+    UI.CreateLabel(area)
+        .SetText(
+            "UNITED NATIONS / SECURITY COUNCIL"
+        );
+
+    if GetClientSetting(
+        "UnitedNationsEnabled",
+        true
+    ) ~= true
+        or un.enabled == false
+    then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "The host has disabled the United Nations."
+            );
+
+        return;
+    end
+
+    local currentTurn =
+        data.tradeTurn
+        or 0;
+
+    local startTurn =
+        GetClientSetting(
+            "UnitedNationsStartTurn",
+            2
+        );
+
+    if currentTurn < startTurn then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "The United Nations becomes active on Turn "
+                .. tostring(startTurn)
+                .. ". Current turn: "
+                .. tostring(currentTurn)
+            );
+
+        return;
+    end
+
+    local function ContainsPlayer(
+        list,
+        playerID
+    )
+
+        for _, value
+            in ipairs(
+                list
+                or {}
+            )
+        do
+
+            if value == playerID then
+                return true;
+            end
+        end
+
+        return false;
+    end
+
+    local permanent =
+        un.permanentMembers
+        or {};
+
+    local rotating =
+        un.rotatingMembers
+        or {};
+
+    local usID =
+        game ~= nil
+        and game.Us ~= nil
+        and game.Us.ID
+        or nil;
+
+    local usPermanent =
+        usID ~= nil
+        and ContainsPlayer(
+            permanent,
+            usID
+        );
+
+    local usCouncil =
+        usPermanent
+        or (
+            usID ~= nil
+            and ContainsPlayer(
+                rotating,
+                usID
+            )
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "SECURITY COUNCIL"
+        );
+
+    local function AddMemberGrid(
+        title,
+        members
+    )
+
+        UI.CreateLabel(area)
+            .SetText(
+                title
+            );
+
+        local row =
+            nil;
+
+        for index, playerID
+            in ipairs(
+                members
+                or {}
+            )
+        do
+
+            if (
+                index - 1
+            )
+                % 3
+                == 0
+            then
+
+                row =
+                    UI.CreateHorizontalLayoutGroup(
+                        area
+                    );
+
+            end
+
+            UI.CreateLabel(row)
+                .SetText(
+                    GetPlayerName(
+                        game,
+                        playerID
+                    )
+                )
+                .SetColor(
+                    GetPlayerUIColor(
+                        game,
+                        playerID,
+                        "#FFFFFF"
+                    )
+                );
+
+        end
+
+        if #(
+            members
+            or {}
+        ) == 0 then
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "No seats assigned yet."
+                );
+
+        end
+    end
+
+    AddMemberGrid(
+        "Permanent Members (veto)",
+        permanent
     );
+
+    AddMemberGrid(
+        "Rotating Members",
+        rotating
+    );
+
+    if un.chairPlayerID ~= nil then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "Chair: "
+                .. GetPlayerName(
+                    game,
+                    un.chairPlayerID
+                )
+                .. " | Vice Chair: "
+                .. (
+                    un.viceChairPlayerID ~= nil
+                    and GetPlayerName(
+                        game,
+                        un.viceChairPlayerID
+                    )
+                    or "None"
+                )
+            );
+
+    end
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "ACTIVE RESOLUTIONS"
+        );
+
+    local active =
+        un.activeResolutions
+        or {};
+
+    if #active == 0 then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "No active Security Council resolutions."
+            );
+
+    end
+
+    for _, resolution
+        in ipairs(
+            active
+        )
+    do
+
+        local targetName =
+            resolution.targetPlayerID ~= nil
+            and GetPlayerName(
+                game,
+                resolution.targetPlayerID
+            )
+            or "None";
+
+        local proposerName =
+            resolution.proposerPlayerID ~= nil
+            and GetPlayerName(
+                game,
+                resolution.proposerPlayerID
+            )
+            or "Unknown";
+
+        local yesVotes =
+            0;
+
+        local noVotes =
+            0;
+
+        local abstainVotes =
+            0;
+
+        for _, vote
+            in pairs(
+                resolution.votes
+                or {}
+            )
+        do
+
+            if vote == "YES" then
+                yesVotes = yesVotes + 1;
+            elseif vote == "NO" then
+                noVotes = noVotes + 1;
+            else
+                abstainVotes = abstainVotes + 1;
+            end
+        end
+
+        UI.CreateLabel(area)
+            .SetText(
+                "#"
+                .. tostring(
+                    resolution.id
+                )
+                .. " "
+                .. string.upper(
+                    tostring(
+                        resolution.resolutionType
+                        or "resolution"
+                    )
+                )
+                .. " | Target: "
+                .. targetName
+                .. "\nProposed by: "
+                .. proposerName
+                .. " | Voting closes Turn "
+                .. tostring(
+                    resolution.voteEndsTurn
+                    or "?"
+                )
+                .. "\nYES "
+                .. tostring(yesVotes)
+                .. " | NO "
+                .. tostring(noVotes)
+                .. " | ABSTAIN "
+                .. tostring(abstainVotes)
+            );
+
+        if usCouncil then
+
+            local row =
+                UI.CreateHorizontalLayoutGroup(
+                    area
+                );
+
+            local resolutionID =
+                resolution.id;
+
+            local function Vote(
+                vote
+            )
+
+                game.SendGameCustomMessage(
+                    "Submitting UN vote...",
+                    {
+                        type =
+                            "voteUNResolution",
+
+                        resolutionID =
+                            resolutionID,
+
+                        vote =
+                            vote
+                    },
+                    function(result)
+
+                        if result ~= nil
+                            and result.message ~= nil
+                        then
+
+                            UI.Alert(
+                                result.message
+                            );
+
+                        end
+
+                        ShowUnitedNationsMenu(
+                            parent,
+                            game
+                        );
+
+                    end
+                );
+
+            end
+
+            UI.CreateButton(row)
+                .SetText(
+                    "YES"
+                )
+                .SetOnClick(
+                    function()
+                        Vote("YES");
+                    end
+                );
+
+            UI.CreateButton(row)
+                .SetText(
+                    usPermanent
+                    and "NO / VETO"
+                    or "NO"
+                )
+                .SetOnClick(
+                    function()
+                        Vote("NO");
+                    end
+                );
+
+            UI.CreateButton(row)
+                .SetText(
+                    "ABSTAIN"
+                )
+                .SetOnClick(
+                    function()
+                        Vote("ABSTAIN");
+                    end
+                );
+
+        end
+    end
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "PROPOSE RESOLUTION"
+        );
+
+    local selectedType =
+        "sanctions";
+
+    local selectedTargetID =
+        nil;
+
+    local proposalLabel =
+        UI.CreateLabel(area);
+
+    local function RefreshProposalLabel()
+
+        proposalLabel.SetText(
+            "Type: "
+            .. string.upper(
+                selectedType
+            )
+            .. " | Target: "
+            .. (
+                selectedTargetID ~= nil
+                and GetPlayerName(
+                    game,
+                    selectedTargetID
+                )
+                or "None"
+            )
+        );
+
+    end
+
+    RefreshProposalLabel();
+
+    local typeRow1 =
+        UI.CreateHorizontalLayoutGroup(
+            area
+        );
+
+    local typeRow2 =
+        UI.CreateHorizontalLayoutGroup(
+            area
+        );
+
+    local function AddTypeButton(
+        row,
+        label,
+        value
+    )
+
+        UI.CreateButton(row)
+            .SetText(
+                label
+            )
+            .SetOnClick(
+                function()
+
+                    selectedType =
+                        value;
+
+                    RefreshProposalLabel();
+
+                end
+            );
+
+    end
+
+    AddTypeButton(typeRow1, "SANCTIONS", "sanctions");
+    AddTypeButton(typeRow1, "EMBARGO", "embargo");
+    AddTypeButton(typeRow1, "AID", "aid");
+    AddTypeButton(typeRow2, "CONDEMN", "condemnation");
+    AddTypeButton(typeRow2, "CEASEFIRE", "ceasefire");
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Search Target Nation"
+        );
+
+    local targetSearch =
+        UI.CreateTextInputField(
+            area
+        );
+
+    local searchHost =
+        UI.CreateVerticalLayoutGroup(
+            area
+        );
+
+    local function RefreshTargetSearch()
+
+        if not UI.IsDestroyed(
+            searchHost
+        ) then
+
+            UI.Destroy(
+                searchHost
+            );
+
+        end
+
+        searchHost =
+            UI.CreateVerticalLayoutGroup(
+                area
+            );
+
+        local query =
+            string.lower(
+                targetSearch.GetText()
+                or ""
+            );
+
+        local matches =
+            {};
+
+        for playerID, player
+            in pairs(
+                game.Game.Players
+                or {}
+            )
+        do
+
+            if playerID ~= usID
+                and player.Surrendered ~= true
+            then
+
+                local name =
+                    GetPlayerName(
+                        game,
+                        playerID
+                    );
+
+                if query == ""
+                    or string.find(
+                        string.lower(name),
+                        query,
+                        1,
+                        true
+                    ) ~= nil
+                then
+
+                    table.insert(
+                        matches,
+                        {
+                            id = playerID,
+                            name = name
+                        }
+                    );
+
+                end
+            end
+        end
+
+        table.sort(
+            matches,
+            function(a, b)
+                return a.name < b.name;
+            end
+        );
+
+        local row =
+            nil;
+
+        for index, item
+            in ipairs(
+                matches
+            )
+        do
+
+            if index > 60 then
+                break;
+            end
+
+            if (
+                index - 1
+            )
+                % 3
+                == 0
+            then
+
+                row =
+                    UI.CreateHorizontalLayoutGroup(
+                        searchHost
+                    );
+
+            end
+
+            local capturedID =
+                item.id;
+
+            UI.CreateButton(row)
+                .SetText(
+                    item.name
+                )
+                .SetTextColor(
+                    GetPlayerUIColor(
+                        game,
+                        item.id,
+                        "#FFFFFF"
+                    )
+                )
+                .SetOnClick(
+                    function()
+
+                        selectedTargetID =
+                            capturedID;
+
+                        RefreshProposalLabel();
+
+                    end
+                );
+
+        end
+    end
+
+    targetSearch.SetOnValueChanged(
+        function()
+            RefreshTargetSearch();
+        end
+    );
+
+    RefreshTargetSearch();
+
+    UI.CreateButton(area)
+        .SetText(
+            "SUBMIT TO SECURITY COUNCIL"
+        )
+        .SetOnClick(
+            function()
+
+                if selectedTargetID == nil then
+
+                    UI.Alert(
+                        "Select a target nation first."
+                    );
+
+                    return;
+                end
+
+                game.SendGameCustomMessage(
+                    "Submitting UN resolution...",
+                    {
+                        type =
+                            "proposeUNResolution",
+
+                        resolutionType =
+                            selectedType,
+
+                        targetPlayerID =
+                            selectedTargetID
+                    },
+                    function(result)
+
+                        if result ~= nil
+                            and result.message ~= nil
+                        then
+
+                            UI.Alert(
+                                result.message
+                            );
+
+                        end
+
+                        ShowUnitedNationsMenu(
+                            parent,
+                            game
+                        );
+
+                    end
+                );
+
+            end
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "RECENT UN HISTORY"
+        );
+
+    local history =
+        un.resolutionHistory
+        or {};
+
+    if #history == 0 then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "No completed resolutions yet."
+            );
+
+    else
+
+        for index = 1,
+            math.min(
+                10,
+                #history
+            )
+        do
+
+            local item =
+                history[index];
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "#"
+                    .. tostring(
+                        item.id
+                        or "?"
+                    )
+                    .. " "
+                    .. string.upper(
+                        tostring(
+                            item.resolutionType
+                            or "resolution"
+                        )
+                    )
+                    .. " - "
+                    .. tostring(
+                        item.status
+                        or "UNKNOWN"
+                    )
+                    .. " | Target: "
+                    .. (
+                        item.targetPlayerID ~= nil
+                        and GetPlayerName(
+                            game,
+                            item.targetPlayerID
+                        )
+                        or "None"
+                    )
+                );
+
+        end
+    end
 end
 
 
@@ -2859,6 +3600,24 @@ function ShowCustomizeTabs(
             );
 
 
+    local resourcesBox =
+        UI.CreateCheckBox(area)
+            .SetText(
+                "Show Resources"
+            )
+            .SetIsChecked(
+                PlayerTabVisibility.resources
+            );
+
+    local unBox =
+        UI.CreateCheckBox(area)
+            .SetText(
+                "Show United Nations"
+            )
+            .SetIsChecked(
+                PlayerTabVisibility.unitedNations
+            );
+
     local globalBox =
         UI.CreateCheckBox(area)
             .SetText(
@@ -2892,6 +3651,12 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.taxation =
                 taxationBox.GetIsChecked();
 
+            PlayerTabVisibility.resources =
+                resourcesBox.GetIsChecked();
+
+            PlayerTabVisibility.unitedNations =
+                unBox.GetIsChecked();
+
             PlayerTabVisibility.globalEconomy =
                 globalBox.GetIsChecked();
 
@@ -2919,6 +3684,8 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.investments = true;
             PlayerTabVisibility.markets = true;
             PlayerTabVisibility.taxation = true;
+            PlayerTabVisibility.resources = true;
+            PlayerTabVisibility.unitedNations = true;
             PlayerTabVisibility.globalEconomy = true;
             PlayerTabVisibility.howItWorks = true;
 
@@ -2984,10 +3751,19 @@ function ShowResourcesMenu(parent, game)
     local penalty = nation.resourcePenaltyPercent or 0;
     local readiness = nation.resourceMilitaryReadiness or 100;
     local unrest = nation.resourceUnrest or 0;
+    local mobilizationBurden =
+        nation.resourceMobilizationCommercePenaltyPercent
+        or 0;
+
     UI.CreateLabel(area).SetText(
-        "Resource Penalty: -" .. tostring(penalty) .. "% Commerce / mobilization" ..
+        "Economic Resource Penalty: -" .. tostring(penalty) .. "% Commerce" ..
         " | Military Readiness: " .. tostring(readiness) .. "%" ..
+        " | Mobilization Burden: -" .. tostring(mobilizationBurden) .. "% Commerce available for future army purchases" ..
         " | Unrest: " .. tostring(unrest)
+    );
+
+    UI.CreateLabel(area).SetText(
+        "Map display: every resource type uses the SAME Resource Hub icon. The number beside it is the combined facility level on that territory. Resource Hub map icons are globally controlled by the host; hiding this Resources tab does not remove native map structures."
     );
 
     local shortages = nation.resourceShortages or {};
@@ -3312,10 +4088,12 @@ function BuildMainTabs(
         );
     end
 
-    if GetClientSetting(
-        "ResourcesEnabled",
-        true
-    ) then
+    if PlayerTabVisibility.resources
+        and GetClientSetting(
+            "ResourcesEnabled",
+            true
+        )
+    then
         QueueTab(
             "resources",
             "Resources",
@@ -3323,6 +4101,26 @@ function BuildMainTabs(
             "#FFFFFF",
             function()
                 ShowResourcesMenu(
+                    contentHost,
+                    game
+                );
+            end
+        );
+    end
+
+    if PlayerTabVisibility.unitedNations
+        and GetClientSetting(
+            "UnitedNationsEnabled",
+            true
+        )
+    then
+        QueueTab(
+            "unitedNations",
+            "United Nations",
+            "#2F4F4F",
+            "#FFFFFF",
+            function()
+                ShowUnitedNationsMenu(
                     contentHost,
                     game
                 );
@@ -10861,7 +11659,9 @@ function ShowHowItWorks(parent)
 
             "Commerce Example: If your nation earns 400 Commerce and resource shortages create a 10% penalty, the resource system removes 40 Commerce that turn.\n\n" ..
 
-            "Military Readiness is a national indicator from 50% to 100%. Oil, Food, Iron, and Gas shortages lower readiness. A lower value means your country is less prepared to sustain new military mobilization; it does not destroy armies already on the map.\n\n" ..
+            "Military Readiness is a national indicator from 50% to 100%. Oil, Food, Iron, Gas, Rare Earths, and Lithium can lower readiness. Existing armies are NEVER removed. Instead, lower readiness creates a Mobilization Burden that reduces the Commerce left available for FUTURE army purchases and deployments.\n\n" ..
+
+            "Military Example: If you have 80% Readiness, your readiness gap is 20%. The mod converts part of that gap into a mobilization burden. Your armies already on the map stay untouched, but less Commerce remains available to purchase new armies next turn.\n\n" ..
 
             "RESOURCE ROLES\n" ..
             "Oil - major military mobilization support.\n" ..
@@ -10881,6 +11681,37 @@ function ShowHowItWorks(parent)
 
             "RESOURCE TRADE EXAMPLE\n" ..
             "If France produces extra Oil but lacks Food, it can sell Oil to another nation for gold and buy Food from a different partner. Contracts move current-turn production every turn while active."
+        );
+
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "UNITED NATIONS / SECURITY COUNCIL\n\n" ..
+
+            "When enabled by the host, the Security Council contains permanent members and rotating members. The default is 5 permanent + 10 rotating seats, but the host can adjust both counts.\n\n" ..
+
+            "Permanent members have veto power. A permanent member voting NO on a Security Council resolution vetoes it even if the normal YES-vote threshold was reached.\n\n" ..
+
+            "The host may pre-assign the first five permanent seats by player slot, or leave those values at 0 for automatic selection based on national economic/military power. Rotating seats refresh every 5 turns.\n\n" ..
+
+            "SANCTIONS: passed sanctions reduce the target nation's Commerce for 3 turns.\n" ..
+            "EMBARGO: blocks Trade Agreement income and Resource Trade deliveries involving the target for 3 turns.\n" ..
+            "AID: gives the target nation an immediate economic aid payment.\n" ..
+            "CONDEMNATION: creates a diplomatic penalty and can increase unrest.\n" ..
+            "CEASEFIRE: if the proposer and target are at war, a passed resolution forces peace between them.\n\n" ..
+
+            "Example: France proposes sanctions on Nation B. Security Council members vote over the configured voting period. If enough members vote YES and no permanent member vetoes it, Nation B receives the sanctions penalty."
         );
 
 

@@ -533,6 +533,33 @@ function Client_PresentConfigureUI(rootParent)
             true
         );
 
+    local unPermanentSeatCount =
+        GetNumberSetting(
+            settings,
+            "UNPermanentSeatCount",
+            5
+        );
+
+    local unRotatingSeatCount =
+        GetNumberSetting(
+            settings,
+            "UNRotatingSeatCount",
+            10
+        );
+
+    local unReplacementMode =
+        GetNumberSetting(
+            settings,
+            "UNReplacementMode",
+            1
+        );
+
+    local unPermanentSeatSlot1 = GetNumberSetting(settings, "UNPermanentSeatSlot1", 0);
+    local unPermanentSeatSlot2 = GetNumberSetting(settings, "UNPermanentSeatSlot2", 0);
+    local unPermanentSeatSlot3 = GetNumberSetting(settings, "UNPermanentSeatSlot3", 0);
+    local unPermanentSeatSlot4 = GetNumberSetting(settings, "UNPermanentSeatSlot4", 0);
+    local unPermanentSeatSlot5 = GetNumberSetting(settings, "UNPermanentSeatSlot5", 0);
+
 
     -- =====================================================
     -- RESOURCE SYSTEM SETTINGS
@@ -591,6 +618,13 @@ function Client_PresentConfigureUI(rootParent)
         GetBoolSetting(
             settings,
             "ResourceUnrestEnabled",
+            true
+        );
+
+    local resourceMapIconsEnabled =
+        GetBoolSetting(
+            settings,
+            "ResourceMapIconsEnabled",
             true
         );
 
@@ -1233,9 +1267,50 @@ function Client_PresentConfigureUI(rootParent)
         unLeadershipEnabled
     );
 
+    AddNumberInput(
+        root,
+        "UNPermanentSeatCount",
+        "Permanent Security Council Seats",
+        unPermanentSeatCount,
+        1,
+        10,
+        "Default: 5. Permanent members can veto Security Council resolutions by voting NO."
+    );
+
+    AddNumberInput(
+        root,
+        "UNRotatingSeatCount",
+        "Rotating Security Council Seats",
+        unRotatingSeatCount,
+        0,
+        50,
+        "Default: 10. Rotating members vote but do not have veto power."
+    );
+
+    AddNumberInput(
+        root,
+        "UNReplacementMode",
+        "Permanent Seat Replacement Mode (1-3)",
+        unReplacementMode,
+        1,
+        3,
+        "1 = next-highest eligible power, 2 = Security Council replacement vote, 3 = configured slot priority / then next-highest."
+    );
+
     UI.CreateLabel(root)
         .SetText(
-            "UN voting will use a simple YES / NO interface with optional reasons, resolution discussion, vote graphs, sanctions, aid, and history."
+            "OPTIONAL PERMANENT SEAT SLOT OVERRIDES\nEnter a player slot number for a permanent seat, or 0 to let the mod auto-select that seat. Slots are based on the sorted active player list used by the scenario."
+        );
+
+    AddNumberInput(root, "UNPermanentSeatSlot1", "Permanent Seat 1 Slot (0 = Auto)", unPermanentSeatSlot1, 0, 400, "");
+    AddNumberInput(root, "UNPermanentSeatSlot2", "Permanent Seat 2 Slot (0 = Auto)", unPermanentSeatSlot2, 0, 400, "");
+    AddNumberInput(root, "UNPermanentSeatSlot3", "Permanent Seat 3 Slot (0 = Auto)", unPermanentSeatSlot3, 0, 400, "");
+    AddNumberInput(root, "UNPermanentSeatSlot4", "Permanent Seat 4 Slot (0 = Auto)", unPermanentSeatSlot4, 0, 400, "");
+    AddNumberInput(root, "UNPermanentSeatSlot5", "Permanent Seat 5 Slot (0 = Auto)", unPermanentSeatSlot5, 0, 400, "");
+
+    UI.CreateLabel(root)
+        .SetText(
+            "Initial V3 UN resolutions: Sanctions, Embargo, Aid, Condemnation, and Ceasefire. Only Security Council members vote. Permanent members have veto power."
         );
 
 
@@ -1385,6 +1460,18 @@ function Client_PresentConfigureUI(rootParent)
         "Allow sustained shortages to create national unrest",
         resourceUnrestEnabled
     );
+
+    AddCheckBox(
+        root,
+        "ResourceMapIconsEnabled",
+        "Show Resource Hub icons on the map",
+        resourceMapIconsEnabled
+    );
+
+    UI.CreateLabel(root)
+        .SetText(
+            "Resource Hub icons use ONE shared structure icon for every resource type. The number beside the icon is the territory's combined resource-facility level. Turning this off hides Resource Hub structures globally while keeping the resource system active."
+        );
 
 
     AddSection(

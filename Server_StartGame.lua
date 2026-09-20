@@ -62,6 +62,12 @@ local function CreateResourceState()
                     false
                 ),
 
+            mapIconsEnabled =
+                GetSetting(
+                    "ResourceMapIconsEnabled",
+                    true
+                ),
+
             territories = {},
             pendingBuilds = {},
             pendingOffers = {},
@@ -502,28 +508,23 @@ local function CreateGlobalState()
                     true
                 ),
 
-            activeResolutions =
-                {},
+            activeResolutions = {},
+            resolutionHistory = {},
+            nextResolutionID = 1,
+            lastProposalTurnByPlayer = {},
+            permanentMembers = {},
+            rotatingMembers = {},
+            councilInitialized = false,
+            lastCouncilRefreshTurn = 0,
 
-            resolutionHistory =
-                {},
+            chairPlayerID = nil,
+            viceChairPlayerID = nil,
 
-            nextResolutionID =
-                1,
-
-            chairPlayerID =
-                nil,
-
-            viceChairPlayerID =
-                nil,
-
-            publicEnemies =
-                {},
-
-            sanctions =
-                {}
+            publicEnemies = {},
+            sanctions = {},
+            embargoes = {},
+            condemnations = {}
         };
-
 
     -- =====================================================
     -- WORLD NEWS / EVENT SYSTEM
@@ -709,7 +710,9 @@ local function InitializeStrategicResources(Game, Standing, economy)
                         local current = economy.resources.territories[territoryID][resourceName] or 0;
                         local level = math.max(current, strength >= 4 and 2 or 1);
                         economy.resources.territories[territoryID][resourceName] = level;
-                        if current == 0 then
+                        if current == 0
+                            and economy.resources.mapIconsEnabled ~= false
+                        then
                             AddStartingResourceHubLevel(Standing, territoryID, level);
                         end
                     end
@@ -762,6 +765,31 @@ function Server_StartGame(
         economy.resources =
             CreateResourceState();
     end
+
+    economy.resources.mapIconsEnabled =
+        GetSetting(
+            "ResourceMapIconsEnabled",
+            economy.resources.mapIconsEnabled ~= false
+        );
+
+    if economy.unitedNations == nil then
+        economy.unitedNations =
+            data.unitedNations or {
+                enabled = GetSetting("UnitedNationsEnabled", true),
+                activeResolutions = {},
+                resolutionHistory = {},
+                nextResolutionID = 1,
+                lastProposalTurnByPlayer = {},
+                permanentMembers = {},
+                rotatingMembers = {},
+                councilInitialized = false,
+                lastCouncilRefreshTurn = 0,
+                sanctions = {},
+                embargoes = {},
+                condemnations = {}
+            };
+    end
+    data.unitedNations = economy.unitedNations;
 
 
     -- =====================================================

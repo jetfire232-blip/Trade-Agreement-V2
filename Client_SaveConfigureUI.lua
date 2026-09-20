@@ -362,6 +362,15 @@ function Client_SaveConfigureUI(
             "UNLeadershipEnabled"
         );
 
+    local unPermanentSeatCount = ReadNumber("UNPermanentSeatCount");
+    local unRotatingSeatCount = ReadNumber("UNRotatingSeatCount");
+    local unReplacementMode = ReadNumber("UNReplacementMode");
+    local unPermanentSeatSlot1 = ReadNumber("UNPermanentSeatSlot1");
+    local unPermanentSeatSlot2 = ReadNumber("UNPermanentSeatSlot2");
+    local unPermanentSeatSlot3 = ReadNumber("UNPermanentSeatSlot3");
+    local unPermanentSeatSlot4 = ReadNumber("UNPermanentSeatSlot4");
+    local unPermanentSeatSlot5 = ReadNumber("UNPermanentSeatSlot5");
+
 
     -- =====================================================
     -- RESOURCES
@@ -405,6 +414,11 @@ function Client_SaveConfigureUI(
     local resourceUnrestEnabled =
         ReadBool(
             "ResourceUnrestEnabled"
+        );
+
+    local resourceMapIconsEnabled =
+        ReadBool(
+            "ResourceMapIconsEnabled"
         );
 
 
@@ -846,6 +860,19 @@ function Client_SaveConfigureUI(
         return;
     end
 
+    if not ValidateRange(alert, unPermanentSeatCount, 1, 10, "Permanent UN seats must be between 1 and 10.") then return; end
+    if not ValidateRange(alert, unRotatingSeatCount, 0, 50, "Rotating UN seats must be between 0 and 50.") then return; end
+    if not ValidateRange(alert, unReplacementMode, 1, 3, "UN replacement mode must be 1, 2, or 3.") then return; end
+    for _, slotValue in ipairs({
+        unPermanentSeatSlot1,
+        unPermanentSeatSlot2,
+        unPermanentSeatSlot3,
+        unPermanentSeatSlot4,
+        unPermanentSeatSlot5
+    }) do
+        if not ValidateRange(alert, slotValue, 0, 400, "Permanent-seat slot overrides must be between 0 and 400.") then return; end
+    end
+
 
     -- =====================================================
     -- VALIDATE RESOURCES
@@ -1116,6 +1143,15 @@ function Client_SaveConfigureUI(
     Mod.Settings.UNLeadershipEnabled =
         unLeadershipEnabled;
 
+    Mod.Settings.UNPermanentSeatCount = unPermanentSeatCount;
+    Mod.Settings.UNRotatingSeatCount = unRotatingSeatCount;
+    Mod.Settings.UNReplacementMode = unReplacementMode;
+    Mod.Settings.UNPermanentSeatSlot1 = unPermanentSeatSlot1;
+    Mod.Settings.UNPermanentSeatSlot2 = unPermanentSeatSlot2;
+    Mod.Settings.UNPermanentSeatSlot3 = unPermanentSeatSlot3;
+    Mod.Settings.UNPermanentSeatSlot4 = unPermanentSeatSlot4;
+    Mod.Settings.UNPermanentSeatSlot5 = unPermanentSeatSlot5;
+
 
     -- =====================================================
     -- SAVE RESOURCES
@@ -1144,6 +1180,9 @@ function Client_SaveConfigureUI(
 
     Mod.Settings.ResourceUnrestEnabled =
         resourceUnrestEnabled;
+
+    Mod.Settings.ResourceMapIconsEnabled =
+        resourceMapIconsEnabled;
 
 
     -- =====================================================

@@ -2972,6 +2972,156 @@ local function FindResourceOffer(resources, offerID)
 end
 
 
+
+-- =========================================================
+-- UNITED NATIONS HELPERS
+-- =========================================================
+
+local UN_RESOLUTION_TYPES = {
+    sanctions = true,
+    embargo = true,
+    aid = true,
+    condemnation = true,
+    ceasefire = true
+};
+
+local function EnsureUNData(data)
+
+    local economy =
+        data.globalEconomy
+        or {};
+
+    data.globalEconomy =
+        economy;
+
+    economy.unitedNations =
+        economy.unitedNations
+        or data.unitedNations
+        or {
+            enabled = GetSetting("UnitedNationsEnabled", true),
+            activeResolutions = {},
+            resolutionHistory = {},
+            nextResolutionID = 1,
+            lastProposalTurnByPlayer = {},
+            permanentMembers = {},
+            rotatingMembers = {},
+            sanctions = {},
+            embargoes = {},
+            condemnations = {}
+        };
+
+    local un =
+        economy.unitedNations;
+
+    un.activeResolutions =
+        un.activeResolutions
+        or {};
+
+    un.resolutionHistory =
+        un.resolutionHistory
+        or {};
+
+    un.lastProposalTurnByPlayer =
+        un.lastProposalTurnByPlayer
+        or {};
+
+    un.permanentMembers =
+        un.permanentMembers
+        or {};
+
+    un.rotatingMembers =
+        un.rotatingMembers
+        or {};
+
+    un.sanctions =
+        un.sanctions
+        or {};
+
+    un.embargoes =
+        un.embargoes
+        or {};
+
+    un.condemnations =
+        un.condemnations
+        or {};
+
+    un.nextResolutionID =
+        un.nextResolutionID
+        or 1;
+
+    data.unitedNations =
+        un;
+
+    return un;
+end
+
+
+local function UNContains(
+    list,
+    playerID
+)
+
+    for _, value
+        in ipairs(
+            list
+            or {}
+        )
+    do
+
+        if value == playerID then
+            return true;
+        end
+    end
+
+    return false;
+end
+
+
+local function UNIsCouncilMember(
+    un,
+    playerID
+)
+
+    return
+        UNContains(
+            un.permanentMembers,
+            playerID
+        )
+        or
+        UNContains(
+            un.rotatingMembers,
+            playerID
+        );
+end
+
+
+local function UNEmbargoActive(
+    data,
+    playerID
+)
+
+    local un =
+        EnsureUNData(
+            data
+        );
+
+    local embargo =
+        un.embargoes[
+            playerID
+        ];
+
+    return embargo ~= nil
+        and (
+            embargo.untilTurn
+            or 0
+        )
+        >= (
+            data.tradeTurn
+            or 0
+        );
+end
+
+
 -- =========================================================
 -- MAIN HOOK
 -- =========================================================
@@ -3003,6 +3153,11 @@ function Server_GameCustomMessage(
 
     local resourceData =
         EnsureResourceData(
+            data
+        );
+
+    local unData =
+        EnsureUNData(
             data
         );
 
@@ -10413,6 +10568,354 @@ end
 
 
     -- =====================================================
+    -- UNITED NATIONS RESOLUTION PROPOSAL
+    -- =====================================================
+
+    if payload.type == "proposeUNResolution" then
+
+        if unData == nil
+            or GetSetting("UnitedNationsEnabled", true) ~= true
+        then
+
+            setReturn({
+                success = false,
+                message = "The United Nations is disabled by the host."
+            });
+
+            return;
+        end
+
+        local currentTurn =
+            data.tradeTurn
+            or 0;
+
+        local startTurn =
+            math.max(
+                1,
+                MakeInteger(
+                    GetSetting(
+                        "UnitedNationsStartTurn",
+                        2
+                    )
+                )
+                or 2
+            );
+
+        if currentTurn < startTurn then
+
+            setReturn({
+                success = false,
+                message =
+                    "The United Nations becomes active on Turn "
+                    .. tostring(startTurn)
+                    .. "."
+            });
+
+            return;
+        end
+
+        local resolutionType =
+            tostring(
+                payload.resolutionType
+                or ""
+            );
+
+        local targetPlayerID =
+            MakeInteger(
+                payload.targetPlayerID
+            );
+
+        if UN_RESOLUTION_TYPES[resolutionType] ~= true then
+
+            setReturn({
+                success = false,
+                message = "Invalid UN resolution type."
+            });
+
+            return;
+        end
+
+        if targetPlayerID == nil
+            or targetPlayerID == playerID
+            or not PlayerAvailable(
+                game,
+                targetPlayerID
+            )
+        then
+
+            setReturn({
+                success = false,
+                message = "Select a valid target nation."
+            });
+
+            return;
+        end
+
+        if resolutionType == "ceasefire"
+            and not IsAtWar(
+                data,
+                playerID,
+                targetPlayerID
+            )
+        then
+
+            setReturn({
+                success = false,
+                message = "A ceasefire resolution can only target a nation you are currently at war with."
+            });
+
+            return;
+        end
+
+        local maxActive =
+            math.max(
+                1,
+                math.min(
+                    10,
+                    MakeInteger(
+                        GetSetting(
+                            "UNMaximumActiveResolutions",
+                            3
+                        )
+                    )
+                    or 3
+                )
+            );
+
+        if #unData.activeResolutions >= maxActive then
+
+            setReturn({
+                success = false,
+                message = "The UN already has the maximum number of active resolutions."
+            });
+
+            return;
+        end
+
+        local cooldown =
+            math.max(
+                0,
+                MakeInteger(
+                    GetSetting(
+                        "UNProposalCooldownTurns",
+                        2
+                    )
+                )
+                or 2
+            );
+
+        local lastTurn =
+            unData.lastProposalTurnByPlayer[
+                playerID
+            ];
+
+        if lastTurn ~= nil
+            and currentTurn
+                - lastTurn
+                < cooldown
+        then
+
+            setReturn({
+                success = false,
+                message =
+                    "Your UN proposal cooldown has "
+                    .. tostring(
+                        cooldown
+                        - (
+                            currentTurn
+                            - lastTurn
+                        )
+                    )
+                    .. " turn(s) remaining."
+            });
+
+            return;
+        end
+
+        local duration =
+            math.max(
+                1,
+                math.min(
+                    10,
+                    MakeInteger(
+                        GetSetting(
+                            "UNVoteDurationTurns",
+                            2
+                        )
+                    )
+                    or 2
+                )
+            );
+
+        local id =
+            unData.nextResolutionID;
+
+        unData.nextResolutionID =
+            id + 1;
+
+        local resolution =
+            {
+                id = id,
+                resolutionType = resolutionType,
+                proposerPlayerID = playerID,
+                targetPlayerID = targetPlayerID,
+                createdTurn = currentTurn,
+                voteEndsTurn = currentTurn + duration,
+                status = "VOTING",
+                votes = {}
+            };
+
+        table.insert(
+            unData.activeResolutions,
+            resolution
+        );
+
+        unData.lastProposalTurnByPlayer[
+            playerID
+        ] =
+            currentTurn;
+
+        Mod.PublicGameData =
+            data;
+
+        setReturn({
+            success = true,
+            message =
+                "UN "
+                .. resolutionType
+                .. " resolution #"
+                .. tostring(id)
+                .. " opened for Security Council voting."
+        });
+
+        return;
+    end
+
+
+    -- =====================================================
+    -- UNITED NATIONS VOTING
+    -- =====================================================
+
+    if payload.type == "voteUNResolution" then
+
+        if unData == nil
+            or GetSetting("UnitedNationsEnabled", true) ~= true
+        then
+
+            setReturn({
+                success = false,
+                message = "The United Nations is disabled."
+            });
+
+            return;
+        end
+
+        if not UNIsCouncilMember(
+            unData,
+            playerID
+        )
+        then
+
+            setReturn({
+                success = false,
+                message = "Only current Security Council members may vote."
+            });
+
+            return;
+        end
+
+        local resolutionID =
+            MakeInteger(
+                payload.resolutionID
+            );
+
+        local vote =
+            string.upper(
+                tostring(
+                    payload.vote
+                    or ""
+                )
+            );
+
+        if vote ~= "YES"
+            and vote ~= "NO"
+            and vote ~= "ABSTAIN"
+        then
+
+            setReturn({
+                success = false,
+                message = "Vote must be YES, NO, or ABSTAIN."
+            });
+
+            return;
+        end
+
+        local resolution =
+            nil;
+
+        for _, item
+            in ipairs(
+                unData.activeResolutions
+                or {}
+            )
+        do
+
+            if item.id == resolutionID then
+
+                resolution =
+                    item;
+
+                break;
+            end
+        end
+
+        if resolution == nil then
+
+            setReturn({
+                success = false,
+                message = "That UN resolution is no longer active."
+            });
+
+            return;
+        end
+
+        resolution.votes =
+            resolution.votes
+            or {};
+
+        resolution.votes[
+            tostring(
+                playerID
+            )
+        ] =
+            vote;
+
+        Mod.PublicGameData =
+            data;
+
+        local vetoText =
+            vote == "NO"
+            and UNContains(
+                unData.permanentMembers,
+                playerID
+            )
+            and " This NO vote will act as a permanent-member veto if it remains when voting closes."
+            or "";
+
+        setReturn({
+            success = true,
+            message =
+                "Your UN vote was recorded as "
+                .. vote
+                .. "."
+                .. vetoText
+        });
+
+        return;
+    end
+
+
+    -- =====================================================
     -- RESOURCE FACILITY DEVELOPMENT
     -- =====================================================
 
@@ -10509,6 +11012,14 @@ end
             setReturn({success=false, message="Invalid resource trade partner."});
             return;
         end
+
+        if UNEmbargoActive(data, playerID)
+            or UNEmbargoActive(data, targetPlayerID)
+        then
+            setReturn({success=false, message="A UN embargo currently blocks new resource trade with one of these nations."});
+            return;
+        end
+
         if RESOURCE_TYPES[resourceName] ~= true then
             setReturn({success=false, message="Invalid resource type."});
             return;

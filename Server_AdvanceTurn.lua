@@ -12773,12 +12773,31 @@ function ApplyTradeIncome(
         -- Trade income can only exist between nations
         -- that are currently permitted to trade.
 
+        local un =
+            data.globalEconomy
+            and data.globalEconomy.unitedNations
+            or data.unitedNations
+            or {};
+
+        local p1Embargoed =
+            un.embargoes ~= nil
+            and un.embargoes[agreement.player1] ~= nil
+            and (un.embargoes[agreement.player1].untilTurn or 0) >= (data.tradeTurn or 0);
+
+        local p2Embargoed =
+            un.embargoes ~= nil
+            and un.embargoes[agreement.player2] ~= nil
+            and (un.embargoes[agreement.player2].untilTurn or 0) >= (data.tradeTurn or 0);
+
         if CanNationsTrade(
             game,
             data,
             agreement.player1,
             agreement.player2
-        ) then
+        )
+            and not p1Embargoed
+            and not p2Embargoed
+        then
 
 
             local income1 =
@@ -13985,6 +14004,11 @@ local function EnsureStrategicResourceState(data)
         activeTrades = {}, tradeHistory = {}, nextOfferID = 1
     };
     local r = economy.resources;
+    r.mapIconsEnabled =
+        GetSetting(
+            "ResourceMapIconsEnabled",
+            r.mapIconsEnabled ~= false
+        );
     r.territories = r.territories or {};
     r.pendingBuilds = r.pendingBuilds or {};
     r.pendingOffers = r.pendingOffers or {};
@@ -14034,11 +14058,17 @@ local function ProcessPendingResourceBuilds(game, data, resourceChanges, addNewO
             nodes[build.resource] = build.toLevel;
             local terrMod = WL.TerritoryModification.Create(build.territoryID);
 
-            -- Every facility upgrade raises the single visible Resource Hub
-            -- number by one instead of adding another map icon.
-            terrMod.AddStructuresOpt = {
-                [RESOURCE_HUB_STRUCTURE] = 1
-            };
+            -- Every resource type shares this one Resource Hub structure.
+            -- If map icons are disabled by the host, resources still function
+            -- but no native structure is added.
+            if resources.mapIconsEnabled ~= false
+                and GetSetting("ResourceMapIconsEnabled", true) == true
+            then
+                terrMod.AddStructuresOpt = {
+                    [RESOURCE_HUB_STRUCTURE] = 1
+                };
+            end
+
             local event = WL.GameOrderEvent.Create(
                 build.playerID,
                 build.resource .. " facility upgraded to level " .. tostring(build.toLevel),
@@ -14100,8 +14130,25 @@ local function ProcessStrategicResources(game, data, resourceChanges)
     for _, trade in ipairs(resources.activeTrades or {}) do
         local seller = economy.nations[trade.fromPlayerID];
         local buyer = economy.nations[trade.toPlayerID];
+        local un =
+            economy.unitedNations
+            or data.unitedNations
+            or {};
+
+        local sellerEmbargoed =
+            un.embargoes ~= nil
+            and un.embargoes[trade.fromPlayerID] ~= nil
+            and (un.embargoes[trade.fromPlayerID].untilTurn or 0) >= (data.tradeTurn or 0);
+
+        local buyerEmbargoed =
+            un.embargoes ~= nil
+            and un.embargoes[trade.toPlayerID] ~= nil
+            and (un.embargoes[trade.toPlayerID].untilTurn or 0) >= (data.tradeTurn or 0);
+
         if seller ~= nil and buyer ~= nil
             and seller.eliminated ~= true and buyer.eliminated ~= true
+            and not sellerEmbargoed
+            and not buyerEmbargoed
         then
             local available = seller.resourceEffective[trade.resource] or 0;
             local desired = math.max(0, tonumber(trade.amount) or 0);
@@ -14127,50 +14174,1766 @@ local function ProcessStrategicResources(game, data, resourceChanges)
                 trade.lastProcessedTurn = data.tradeTurn or 0;
             end
             table.insert(activeTrades, trade);
+        elseif seller ~= nil and buyer ~= nil
+            and seller.eliminated ~= true and buyer.eliminated ~= true
+        then
+            -- UN embargo pauses deliveries; it does not permanently delete
+            -- the contract.  Delivery automatically resumes when the embargo expires.
+            trade.lastTransferred = 0;
+            trade.lastProcessedTurn = data.tradeTurn or 0;
+            trade.pausedByUNEmbargo = true;
+            table.insert(activeTrades, trade);
         end
     end
     resources.activeTrades = activeTrades;
 
-    local penaltyPerShortage = math.max(0, tonumber(GetSetting("ResourceShortagePenaltyPercent", 3)) or 3);
-    local unrestEnabled = GetSetting("ResourceUnrestEnabled", true) == true;
+    local basePenalty =
+        math.max(
+            0,
+            tonumber(
+                GetSetting(
+                    "ResourceShortagePenaltyPercent",
+                    3
+                )
+            )
+            or 3
+        );
 
-    for playerID, nation in pairs(economy.nations or {}) do
+    local unrestEnabled =
+        GetSetting(
+            "ResourceUnrestEnabled",
+            true
+        )
+        == true;
+
+    for playerID, nation
+        in pairs(
+            economy.nations
+            or {}
+        )
+    do
+
         if nation.eliminated ~= true then
-            local commerce = math.max(1, GetCommerceIncome(game, playerID));
+
+            local commerce =
+                math.max(
+                    1,
+                    GetCommerceIncome(
+                        game,
+                        playerID
+                    )
+                );
+
+            -- Resource demand scales gently with national Commerce.
+            -- Uranium is intentionally strategic rather than a basic
+            -- peacetime requirement.
             local demands = {
-                Oil = math.max(1, math.ceil(commerce / 500)),
-                Food = math.max(1, math.ceil(commerce / 450)),
-                Iron = math.max(1, math.ceil(commerce / 800)),
-                Gas = math.max(0, math.ceil(commerce / 1000) - 1)
+                Oil =
+                    math.max(
+                        1,
+                        math.ceil(
+                            commerce / 500
+                        )
+                    ),
+
+                Food =
+                    math.max(
+                        1,
+                        math.ceil(
+                            commerce / 450
+                        )
+                    ),
+
+                Iron =
+                    math.max(
+                        1,
+                        math.ceil(
+                            commerce / 800
+                        )
+                    ),
+
+                Gas =
+                    math.max(
+                        0,
+                        math.ceil(
+                            commerce / 1000
+                        )
+                        - 1
+                    ),
+
+                Coal =
+                    commerce >= 900
+                    and 1
+                    or 0,
+
+                Copper =
+                    commerce >= 700
+                    and 1
+                    or 0,
+
+                ["Rare Earths"] =
+                    commerce >= 1000
+                    and 1
+                    or 0,
+
+                Lithium =
+                    commerce >= 1300
+                    and 1
+                    or 0
             };
-            local shortageCount = 0;
-            for resourceName, demand in pairs(demands) do
-                local have = nation.resourceEffective[resourceName] or 0;
+
+            local readinessPenalty =
+                0;
+
+            local commercePenalty =
+                0;
+
+            local unrestGain =
+                0;
+
+            for resourceName, demand
+                in pairs(
+                    demands
+                )
+            do
+
+                local have =
+                    nation.resourceEffective[
+                        resourceName
+                    ]
+                    or 0;
+
                 if have < demand then
-                    shortageCount = shortageCount + 1;
-                    nation.resourceShortages[resourceName] = demand - have;
+
+                    local missing =
+                        demand - have;
+
+                    nation.resourceShortages[
+                        resourceName
+                    ] =
+                        missing;
+
+                    -- Every resource has a distinct role.
+                    if resourceName == "Oil" then
+
+                        readinessPenalty =
+                            readinessPenalty
+                            + 15 * missing;
+
+                    elseif resourceName == "Food" then
+
+                        readinessPenalty =
+                            readinessPenalty
+                            + 10 * missing;
+
+                        unrestGain =
+                            unrestGain
+                            + 3 * missing;
+
+                    elseif resourceName == "Iron" then
+
+                        readinessPenalty =
+                            readinessPenalty
+                            + 12 * missing;
+
+                    elseif resourceName == "Gas" then
+
+                        readinessPenalty =
+                            readinessPenalty
+                            + 5 * missing;
+
+                        commercePenalty =
+                            commercePenalty
+                            + basePenalty * missing;
+
+                    elseif resourceName == "Coal" then
+
+                        commercePenalty =
+                            commercePenalty
+                            + 2 * missing;
+
+                    elseif resourceName == "Copper" then
+
+                        commercePenalty =
+                            commercePenalty
+                            + 2 * missing;
+
+                    elseif resourceName == "Rare Earths" then
+
+                        readinessPenalty =
+                            readinessPenalty
+                            + 3 * missing;
+
+                        commercePenalty =
+                            commercePenalty
+                            + 1 * missing;
+
+                    elseif resourceName == "Lithium" then
+
+                        readinessPenalty =
+                            readinessPenalty
+                            + 2 * missing;
+
+                        commercePenalty =
+                            commercePenalty
+                            + 1 * missing;
+
+                    end
+
                 end
             end
-            local penaltyPercent = math.min(15, shortageCount * penaltyPerShortage);
-            nation.resourcePenaltyPercent = penaltyPercent;
-            nation.resourceMilitaryReadiness = math.max(50, 100 - (shortageCount * 10));
+
+            -- Existing armies are never deleted.
+            -- Readiness represents future mobilization efficiency.
+            nation.resourceMilitaryReadiness =
+                math.max(
+                    50,
+                    100
+                    - math.min(
+                        50,
+                        readinessPenalty
+                    )
+                );
+
+            nation.resourceMobilizationPenaltyPercent =
+                100
+                - nation.resourceMilitaryReadiness;
+
+            -- Readiness does not remove armies already on the map.
+            -- Instead it creates a future-mobilization burden by
+            -- reducing the Commerce left available for new army purchases.
+            nation.resourceMobilizationCommercePenaltyPercent =
+                math.min(
+                    15,
+                    math.floor(
+                        (
+                            nation.resourceMobilizationPenaltyPercent
+                            * 0.30
+                        )
+                        + 0.5
+                    )
+                );
+
+            nation.resourcePenaltyPercent =
+                math.min(
+                    15,
+                    commercePenalty
+                );
 
             if unrestEnabled then
-                if shortageCount > 0 then
-                    nation.resourceUnrest = math.min(100, (nation.resourceUnrest or 0) + shortageCount * 2);
+
+                if unrestGain > 0 then
+
+                    nation.resourceUnrest =
+                        math.min(
+                            100,
+                            (
+                                nation.resourceUnrest
+                                or 0
+                            )
+                            + unrestGain
+                        );
+
+                elseif next(
+                    nation.resourceShortages
+                    or {}
+                ) ~= nil then
+
+                    nation.resourceUnrest =
+                        math.min(
+                            100,
+                            (
+                                nation.resourceUnrest
+                                or 0
+                            )
+                            + 1
+                        );
+
                 else
-                    nation.resourceUnrest = math.max(0, (nation.resourceUnrest or 0) - 2);
+
+                    nation.resourceUnrest =
+                        math.max(
+                            0,
+                            (
+                                nation.resourceUnrest
+                                or 0
+                            )
+                            - 2
+                        );
+
                 end
             end
 
-            if penaltyPercent > 0 then
-                local penaltyGold = math.floor((commerce * penaltyPercent / 100) + 0.5);
+            local totalResourceGoldPenaltyPercent =
+                math.min(
+                    25,
+                    (
+                        nation.resourcePenaltyPercent
+                        or 0
+                    )
+                    + (
+                        nation.resourceMobilizationCommercePenaltyPercent
+                        or 0
+                    )
+                );
+
+            if totalResourceGoldPenaltyPercent > 0 then
+
+                local penaltyGold =
+                    math.floor(
+                        (
+                            commerce
+                            * totalResourceGoldPenaltyPercent
+                            / 100
+                        )
+                        + 0.5
+                    );
+
                 if penaltyGold > 0 then
-                    AddResourceChange(resourceChanges, playerID, -penaltyGold);
+
+                    AddResourceChange(
+                        resourceChanges,
+                        playerID,
+                        -penaltyGold
+                    );
+
                 end
             end
+
         end
     end
+
+end
+
+
+
+-- =========================================================
+-- UNITED NATIONS / SECURITY COUNCIL
+-- =========================================================
+
+local function EnsureUnitedNationsState(data)
+
+    local economy =
+        data.globalEconomy;
+
+    if economy == nil then
+        return nil;
+    end
+
+    economy.unitedNations =
+        economy.unitedNations
+        or data.unitedNations
+        or {
+            enabled =
+                GetSetting(
+                    "UnitedNationsEnabled",
+                    true
+                ),
+
+            activeResolutions = {},
+            resolutionHistory = {},
+            nextResolutionID = 1,
+            lastProposalTurnByPlayer = {},
+            permanentMembers = {},
+            rotatingMembers = {},
+            councilInitialized = false,
+            lastCouncilRefreshTurn = 0,
+            sanctions = {},
+            embargoes = {},
+            condemnations = {}
+        };
+
+    local un =
+        economy.unitedNations;
+
+    un.enabled =
+        GetSetting(
+            "UnitedNationsEnabled",
+            un.enabled ~= false
+        );
+
+    un.activeResolutions =
+        un.activeResolutions
+        or {};
+
+    un.resolutionHistory =
+        un.resolutionHistory
+        or {};
+
+    un.nextResolutionID =
+        un.nextResolutionID
+        or 1;
+
+    un.lastProposalTurnByPlayer =
+        un.lastProposalTurnByPlayer
+        or {};
+
+    un.permanentMembers =
+        un.permanentMembers
+        or {};
+
+    un.rotatingMembers =
+        un.rotatingMembers
+        or {};
+
+    un.sanctions =
+        un.sanctions
+        or {};
+
+    un.embargoes =
+        un.embargoes
+        or {};
+
+    un.condemnations =
+        un.condemnations
+        or {};
+
+    data.unitedNations =
+        un;
+
+    return un;
+end
+
+
+local function UNListContains(
+    list,
+    playerID
+)
+
+    for _, value
+        in ipairs(
+            list
+            or {}
+        )
+    do
+
+        if value == playerID then
+            return true;
+        end
+    end
+
+    return false;
+end
+
+
+local function UNPlayerAvailable(
+    game,
+    data,
+    playerID
+)
+
+    local player =
+        game.Game.Players[
+            playerID
+        ];
+
+    local nation =
+        data.globalEconomy
+            .nations[
+                playerID
+            ];
+
+    return player ~= nil
+        and player.Surrendered ~= true
+        and nation ~= nil
+        and nation.eliminated ~= true;
+end
+
+
+local function UNPowerScore(
+    game,
+    data,
+    playerID
+)
+
+    local nation =
+        data.globalEconomy
+            .nations[
+                playerID
+            ]
+        or {};
+
+    local commerce =
+        math.max(
+            0,
+            GetCommerceIncome(
+                game,
+                playerID
+            )
+        );
+
+    local readiness =
+        nation.resourceMilitaryReadiness
+        or 100;
+
+    local gold =
+        math.max(
+            0,
+            GetStoredGold(
+                game,
+                playerID
+            )
+        );
+
+    return
+        commerce
+        + math.floor(
+            gold * 0.15
+        )
+        + math.floor(
+            readiness * 2
+        );
+end
+
+
+local function UNEligiblePlayerIDs(
+    game,
+    data
+)
+
+    local ids =
+        {};
+
+    for playerID, _
+        in pairs(
+            game.Game.Players
+            or {}
+        )
+    do
+
+        if UNPlayerAvailable(
+            game,
+            data,
+            playerID
+        ) then
+
+            table.insert(
+                ids,
+                playerID
+            );
+
+        end
+    end
+
+    table.sort(
+        ids
+    );
+
+    return ids;
+end
+
+
+local function UNConfiguredPermanentPlayers(
+    game,
+    data
+)
+
+    local eligible =
+        UNEligiblePlayerIDs(
+            game,
+            data
+        );
+
+    local configured =
+        {};
+
+    for index = 1, 5 do
+
+        local slot =
+            math.floor(
+                tonumber(
+                    GetSetting(
+                        "UNPermanentSeatSlot"
+                        .. tostring(index),
+                        0
+                    )
+                )
+                or 0
+            );
+
+        local playerID =
+            slot > 0
+            and eligible[
+                slot
+            ]
+            or nil;
+
+        if playerID ~= nil
+            and not UNListContains(
+                configured,
+                playerID
+            )
+        then
+
+            table.insert(
+                configured,
+                playerID
+            );
+
+        end
+    end
+
+    return configured;
+end
+
+
+local function UNChooseReplacementByCouncil(
+    game,
+    data,
+    existingPermanent,
+    existingRotating,
+    candidates
+)
+
+    if #candidates == 0 then
+        return nil;
+    end
+
+    local votes =
+        {};
+
+    for _, candidateID
+        in ipairs(
+            candidates
+        )
+    do
+
+        votes[
+            candidateID
+        ] =
+            0;
+    end
+
+    local council =
+        {};
+
+    for _, playerID
+        in ipairs(
+            existingPermanent
+            or {}
+        )
+    do
+
+        table.insert(
+            council,
+            playerID
+        );
+    end
+
+    for _, playerID
+        in ipairs(
+            existingRotating
+            or {}
+        )
+    do
+
+        if not UNListContains(
+            council,
+            playerID
+        ) then
+
+            table.insert(
+                council,
+                playerID
+            );
+
+        end
+    end
+
+    for _, voterID
+        in ipairs(
+            council
+        )
+    do
+
+        if UNPlayerAvailable(
+            game,
+            data,
+            voterID
+        ) then
+
+            local bestCandidate =
+                candidates[1];
+
+            local bestScore =
+                -1;
+
+            for _, candidateID
+                in ipairs(
+                    candidates
+                )
+            do
+
+                local score =
+                    UNPowerScore(
+                        game,
+                        data,
+                        candidateID
+                    );
+
+                if IsDiplomacyWar(
+                    data,
+                    voterID,
+                    candidateID
+                ) then
+
+                    score =
+                        score
+                        - 100000;
+
+                end
+
+                if score > bestScore then
+
+                    bestScore =
+                        score;
+
+                    bestCandidate =
+                        candidateID;
+
+                end
+            end
+
+            votes[
+                bestCandidate
+            ] =
+                (
+                    votes[
+                        bestCandidate
+                    ]
+                    or 0
+                )
+                + 1;
+
+        end
+    end
+
+    local winner =
+        candidates[1];
+
+    local winnerVotes =
+        -1;
+
+    for _, candidateID
+        in ipairs(
+            candidates
+        )
+    do
+
+        local count =
+            votes[
+                candidateID
+            ]
+            or 0;
+
+        if count > winnerVotes then
+
+            winnerVotes =
+                count;
+
+            winner =
+                candidateID;
+
+        elseif count == winnerVotes
+            and UNPowerScore(
+                game,
+                data,
+                candidateID
+            )
+            >
+            UNPowerScore(
+                game,
+                data,
+                winner
+            )
+        then
+
+            winner =
+                candidateID;
+
+        end
+    end
+
+    return winner;
+end
+
+
+local function RefreshUNSecurityCouncil(
+    game,
+    data,
+    forceRefresh
+)
+
+    local un =
+        EnsureUnitedNationsState(
+            data
+        );
+
+    if un == nil
+        or un.enabled ~= true
+    then
+        return;
+    end
+
+    local currentTurn =
+        data.tradeTurn
+        or 0;
+
+    local startTurn =
+        math.max(
+            1,
+            math.floor(
+                tonumber(
+                    GetSetting(
+                        "UnitedNationsStartTurn",
+                        2
+                    )
+                )
+                or 2
+            )
+        );
+
+    if currentTurn < startTurn then
+        return;
+    end
+
+    local permanentCount =
+        math.max(
+            1,
+            math.min(
+                10,
+                math.floor(
+                    tonumber(
+                        GetSetting(
+                            "UNPermanentSeatCount",
+                            5
+                        )
+                    )
+                    or 5
+                )
+            )
+        );
+
+    local rotatingCount =
+        math.max(
+            0,
+            math.min(
+                50,
+                math.floor(
+                    tonumber(
+                        GetSetting(
+                            "UNRotatingSeatCount",
+                            10
+                        )
+                    )
+                    or 10
+                )
+            )
+        );
+
+    local eligible =
+        UNEligiblePlayerIDs(
+            game,
+            data
+        );
+
+    table.sort(
+        eligible,
+        function(a, b)
+
+            local scoreA =
+                UNPowerScore(
+                    game,
+                    data,
+                    a
+                );
+
+            local scoreB =
+                UNPowerScore(
+                    game,
+                    data,
+                    b
+                );
+
+            if scoreA == scoreB then
+                return a < b;
+            end
+
+            return scoreA > scoreB;
+        end
+    );
+
+    local configured =
+        UNConfiguredPermanentPlayers(
+            game,
+            data
+        );
+
+    local oldPermanent =
+        un.permanentMembers
+        or {};
+
+    local newPermanent =
+        {};
+
+    -- Host-configured slots always get first priority.
+    for _, playerID
+        in ipairs(
+            configured
+        )
+    do
+
+        if #newPermanent < permanentCount
+            and UNPlayerAvailable(
+                game,
+                data,
+                playerID
+            )
+        then
+
+            table.insert(
+                newPermanent,
+                playerID
+            );
+
+        end
+    end
+
+    -- Preserve surviving permanent members.
+    for _, playerID
+        in ipairs(
+            oldPermanent
+        )
+    do
+
+        if #newPermanent >= permanentCount then
+            break;
+        end
+
+        if UNPlayerAvailable(
+            game,
+            data,
+            playerID
+        )
+            and not UNListContains(
+                newPermanent,
+                playerID
+            )
+        then
+
+            table.insert(
+                newPermanent,
+                playerID
+            );
+
+        end
+    end
+
+    local replacementMode =
+        math.max(
+            1,
+            math.min(
+                3,
+                math.floor(
+                    tonumber(
+                        GetSetting(
+                            "UNReplacementMode",
+                            1
+                        )
+                    )
+                    or 1
+                )
+            )
+        );
+
+    while #newPermanent < permanentCount do
+
+        local candidates =
+            {};
+
+        for _, playerID
+            in ipairs(
+                eligible
+            )
+        do
+
+            if not UNListContains(
+                newPermanent,
+                playerID
+            ) then
+
+                table.insert(
+                    candidates,
+                    playerID
+                );
+
+            end
+        end
+
+        if #candidates == 0 then
+            break;
+        end
+
+        local chosen =
+            nil;
+
+        if replacementMode == 2
+            and #oldPermanent > 0
+        then
+
+            chosen =
+                UNChooseReplacementByCouncil(
+                    game,
+                    data,
+                    newPermanent,
+                    un.rotatingMembers,
+                    candidates
+                );
+
+        else
+
+            chosen =
+                candidates[1];
+
+        end
+
+        if chosen == nil then
+            break;
+        end
+
+        table.insert(
+            newPermanent,
+            chosen
+        );
+
+    end
+
+    un.permanentMembers =
+        newPermanent;
+
+    local shouldRotate =
+        forceRefresh == true
+        or un.councilInitialized ~= true
+        or currentTurn
+            - (
+                un.lastCouncilRefreshTurn
+                or 0
+            )
+            >= 5;
+
+    if shouldRotate then
+
+        local rotating =
+            {};
+
+        for _, playerID
+            in ipairs(
+                eligible
+            )
+        do
+
+            if #rotating >= rotatingCount then
+                break;
+            end
+
+            if not UNListContains(
+                newPermanent,
+                playerID
+            ) then
+
+                table.insert(
+                    rotating,
+                    playerID
+                );
+
+            end
+        end
+
+        un.rotatingMembers =
+            rotating;
+
+        un.lastCouncilRefreshTurn =
+            currentTurn;
+
+    else
+
+        local rotating =
+            {};
+
+        for _, playerID
+            in ipairs(
+                un.rotatingMembers
+                or {}
+            )
+        do
+
+            if #rotating >= rotatingCount then
+                break;
+            end
+
+            if UNPlayerAvailable(
+                game,
+                data,
+                playerID
+            )
+                and not UNListContains(
+                    newPermanent,
+                    playerID
+                )
+            then
+
+                table.insert(
+                    rotating,
+                    playerID
+                );
+
+            end
+        end
+
+        for _, playerID
+            in ipairs(
+                eligible
+            )
+        do
+
+            if #rotating >= rotatingCount then
+                break;
+            end
+
+            if not UNListContains(
+                newPermanent,
+                playerID
+            )
+                and not UNListContains(
+                    rotating,
+                    playerID
+                )
+            then
+
+                table.insert(
+                    rotating,
+                    playerID
+                );
+
+            end
+        end
+
+        un.rotatingMembers =
+            rotating;
+
+    end
+
+    un.councilInitialized =
+        true;
+
+    if GetSetting(
+        "UNLeadershipEnabled",
+        true
+    ) == true then
+
+        un.chairPlayerID =
+            un.rotatingMembers[1]
+            or un.permanentMembers[1];
+
+        un.viceChairPlayerID =
+            un.rotatingMembers[2]
+            or un.permanentMembers[2]
+            or un.chairPlayerID;
+
+    end
+end
+
+
+local function UNCouncilMembers(
+    un
+)
+
+    local members =
+        {};
+
+    for _, playerID
+        in ipairs(
+            un.permanentMembers
+            or {}
+        )
+    do
+
+        table.insert(
+            members,
+            playerID
+        );
+    end
+
+    for _, playerID
+        in ipairs(
+            un.rotatingMembers
+            or {}
+        )
+    do
+
+        if not UNListContains(
+            members,
+            playerID
+        ) then
+
+            table.insert(
+                members,
+                playerID
+            );
+
+        end
+    end
+
+    return members;
+end
+
+
+local function UNRecordHistory(
+    un,
+    entry
+)
+
+    table.insert(
+        un.resolutionHistory,
+        1,
+        entry
+    );
+
+    while #un.resolutionHistory > 50 do
+
+        table.remove(
+            un.resolutionHistory
+        );
+
+    end
+end
+
+
+local function UNApplyPassedResolution(
+    game,
+    data,
+    un,
+    resolution,
+    resourceChanges
+)
+
+    local currentTurn =
+        data.tradeTurn
+        or 0;
+
+    local targetID =
+        resolution.targetPlayerID;
+
+    local targetNation =
+        targetID
+        and data.globalEconomy.nations[
+            targetID
+        ]
+        or nil;
+
+    if resolution.resolutionType == "sanctions"
+        and targetNation ~= nil
+    then
+
+        local untilTurn =
+            currentTurn
+            + 3;
+
+        un.sanctions[
+            targetID
+        ] =
+            {
+                untilTurn =
+                    untilTurn,
+
+                percent =
+                    10,
+
+                resolutionID =
+                    resolution.id
+            };
+
+        targetNation.unSanctionsUntilTurn =
+            untilTurn;
+
+        targetNation.unSanctionsPercent =
+            10;
+
+    elseif resolution.resolutionType == "embargo"
+        and targetNation ~= nil
+    then
+
+        local untilTurn =
+            currentTurn
+            + 3;
+
+        un.embargoes[
+            targetID
+        ] =
+            {
+                untilTurn =
+                    untilTurn,
+
+                resolutionID =
+                    resolution.id
+            };
+
+        targetNation.unEmbargoUntilTurn =
+            untilTurn;
+
+    elseif resolution.resolutionType == "aid"
+        and targetNation ~= nil
+    then
+
+        local aidGold =
+            math.max(
+                50,
+                math.floor(
+                    GetCommerceIncome(
+                        game,
+                        targetID
+                    )
+                    * 0.10
+                )
+            );
+
+        AddResourceChange(
+            resourceChanges,
+            targetID,
+            aidGold
+        );
+
+        resolution.effectValue =
+            aidGold;
+
+    elseif resolution.resolutionType == "condemnation"
+        and targetNation ~= nil
+    then
+
+        local untilTurn =
+            currentTurn
+            + 3;
+
+        un.condemnations[
+            targetID
+        ] =
+            {
+                untilTurn =
+                    untilTurn,
+
+                resolutionID =
+                    resolution.id
+            };
+
+        targetNation.unCondemnationUntilTurn =
+            untilTurn;
+
+        if targetNation.resourceUnrest ~= nil then
+
+            targetNation.resourceUnrest =
+                math.min(
+                    100,
+                    targetNation.resourceUnrest
+                    + 5
+                );
+
+        end
+
+    elseif resolution.resolutionType == "ceasefire"
+        and targetID ~= nil
+        and resolution.proposerPlayerID ~= nil
+        and IsDiplomacyWar(
+            data,
+            resolution.proposerPlayerID,
+            targetID
+        )
+    then
+
+        ActivateDiplomacyPeace(
+            game,
+            data,
+            resolution.proposerPlayerID,
+            targetID,
+            "un_ceasefire"
+        );
+
+    end
+end
+
+
+local function ProcessUnitedNations(
+    game,
+    data,
+    resourceChanges
+)
+
+    local un =
+        EnsureUnitedNationsState(
+            data
+        );
+
+    if un == nil
+        or un.enabled ~= true
+    then
+        return;
+    end
+
+    local currentTurn =
+        data.tradeTurn
+        or 0;
+
+    local startTurn =
+        math.max(
+            1,
+            math.floor(
+                tonumber(
+                    GetSetting(
+                        "UnitedNationsStartTurn",
+                        2
+                    )
+                )
+                or 2
+            )
+        );
+
+    if currentTurn < startTurn then
+        return;
+    end
+
+    RefreshUNSecurityCouncil(
+        game,
+        data,
+        false
+    );
+
+    -- Existing sanctions are applied once per nation per turn.
+    for playerID, sanction
+        in pairs(
+            un.sanctions
+            or {}
+        )
+    do
+
+        if sanction.untilTurn ~= nil
+            and currentTurn <= sanction.untilTurn
+            and UNPlayerAvailable(
+                game,
+                data,
+                playerID
+            )
+        then
+
+            local percent =
+                math.max(
+                    0,
+                    tonumber(
+                        sanction.percent
+                    )
+                    or 10
+                );
+
+            local amount =
+                math.floor(
+                    GetCommerceIncome(
+                        game,
+                        playerID
+                    )
+                    * percent
+                    / 100
+                    + 0.5
+                );
+
+            if amount > 0 then
+
+                AddResourceChange(
+                    resourceChanges,
+                    playerID,
+                    -amount
+                );
+
+            end
+
+        elseif sanction.untilTurn ~= nil
+            and currentTurn > sanction.untilTurn
+        then
+
+            un.sanctions[
+                playerID
+            ] =
+                nil;
+
+        end
+    end
+
+    for playerID, embargo
+        in pairs(
+            un.embargoes
+            or {}
+        )
+    do
+
+        if embargo.untilTurn ~= nil
+            and currentTurn > embargo.untilTurn
+        then
+
+            un.embargoes[
+                playerID
+            ] =
+                nil;
+
+        end
+    end
+
+    for playerID, condemnation
+        in pairs(
+            un.condemnations
+            or {}
+        )
+    do
+
+        if condemnation.untilTurn ~= nil
+            and currentTurn > condemnation.untilTurn
+        then
+
+            un.condemnations[
+                playerID
+            ] =
+                nil;
+
+        end
+    end
+
+    local council =
+        UNCouncilMembers(
+            un
+        );
+
+    local active =
+        {};
+
+    for _, resolution
+        in ipairs(
+            un.activeResolutions
+            or {}
+        )
+    do
+
+        resolution.votes =
+            resolution.votes
+            or {};
+
+        -- AI council members vote automatically.
+        for _, voterID
+            in ipairs(
+                council
+            )
+        do
+
+            local player =
+                game.Game.Players[
+                    voterID
+                ];
+
+            if player ~= nil
+                and player.IsAI == true
+                and resolution.votes[
+                    tostring(
+                        voterID
+                    )
+                ] == nil
+            then
+
+                local vote =
+                    "YES";
+
+                if resolution.targetPlayerID == voterID then
+
+                    vote =
+                        "NO";
+
+                elseif resolution.resolutionType == "aid" then
+
+                    vote =
+                        "YES";
+
+                elseif resolution.targetPlayerID ~= nil
+                    and IsDiplomacyWar(
+                        data,
+                        voterID,
+                        resolution.targetPlayerID
+                    )
+                then
+
+                    vote =
+                        "YES";
+
+                else
+
+                    local deterministic =
+                        (
+                            voterID
+                            * 31
+                            + resolution.id
+                            * 17
+                            + currentTurn
+                        )
+                        % 100;
+
+                    vote =
+                        deterministic < 55
+                        and "YES"
+                        or "NO";
+
+                end
+
+                resolution.votes[
+                    tostring(
+                        voterID
+                    )
+                ] =
+                    vote;
+
+            end
+        end
+
+        if currentTurn >= (
+            resolution.voteEndsTurn
+            or currentTurn
+        )
+        then
+
+            local yesVotes =
+                0;
+
+            local eligibleVotes =
+                0;
+
+            local vetoed =
+                false;
+
+            for _, voterID
+                in ipairs(
+                    council
+                )
+            do
+
+                if UNPlayerAvailable(
+                    game,
+                    data,
+                    voterID
+                ) then
+
+                    eligibleVotes =
+                        eligibleVotes
+                        + 1;
+
+                    local vote =
+                        resolution.votes[
+                            tostring(
+                                voterID
+                            )
+                        ]
+                        or "ABSTAIN";
+
+                    if vote == "YES" then
+
+                        yesVotes =
+                            yesVotes
+                            + 1;
+
+                    elseif vote == "NO"
+                        and UNListContains(
+                            un.permanentMembers,
+                            voterID
+                        )
+                    then
+
+                        vetoed =
+                            true;
+
+                    end
+
+                end
+            end
+
+            local requirement =
+                math.max(
+                    50,
+                    math.min(
+                        100,
+                        tonumber(
+                            GetSetting(
+                                "UNPassRequirementPercent",
+                                60
+                            )
+                        )
+                        or 60
+                    )
+                );
+
+            local yesPercent =
+                eligibleVotes > 0
+                and (
+                    yesVotes
+                    * 100
+                    / eligibleVotes
+                )
+                or 0;
+
+            local passed =
+                not vetoed
+                and yesPercent >= requirement;
+
+            resolution.status =
+                passed
+                and "PASSED"
+                or (
+                    vetoed
+                    and "VETOED"
+                    or "FAILED"
+                );
+
+            resolution.yesVotes =
+                yesVotes;
+
+            resolution.eligibleVotes =
+                eligibleVotes;
+
+            resolution.vetoed =
+                vetoed;
+
+            resolution.resolvedTurn =
+                currentTurn;
+
+            if passed then
+
+                UNApplyPassedResolution(
+                    game,
+                    data,
+                    un,
+                    resolution,
+                    resourceChanges
+                );
+
+            end
+
+            UNRecordHistory(
+                un,
+                resolution
+            );
+
+        else
+
+            table.insert(
+                active,
+                resolution
+            );
+
+        end
+    end
+
+    un.activeResolutions =
+        active;
 end
 
 
@@ -14218,6 +15981,12 @@ function Server_AdvanceTurn_Start(
     );
 
     ProcessStrategicResources(
+        game,
+        data,
+        resourceChanges
+    );
+
+    ProcessUnitedNations(
         game,
         data,
         resourceChanges
