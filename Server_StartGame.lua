@@ -575,17 +575,11 @@ local RESOURCE_ORDER = {
     "Lithium"
 };
 
-local RESOURCE_STRUCTURE = {
-    ["Oil"] = WL.StructureType.Power,
-    ["Gas"] = WL.StructureType.Smelter,
-    ["Uranium"] = WL.StructureType.Draft,
-    ["Iron"] = WL.StructureType.Mine,
-    ["Food"] = WL.StructureType.ArmyCamp,
-    ["Rare Earths"] = WL.StructureType.DigSite,
-    ["Coal"] = WL.StructureType.ResourceCache,
-    ["Copper"] = WL.StructureType.Market,
-    ["Lithium"] = WL.StructureType.Recipe
-};
+-- One map icon per resource territory.
+-- The structure count is the total facility/deposit level on that territory,
+-- so War.app renders a single icon with a number beside it (city-style).
+local RESOURCE_HUB_STRUCTURE =
+    WL.StructureType.ResourceCache;
 
 -- Slot profiles are deliberately broad 2026 strategic-production strengths,
 -- not literal extraction tonnage.  They are used to decide how many deposits
@@ -639,15 +633,17 @@ local function GetResourceProfile(slot)
     };
 end
 
-local function AddStartingStructure(standing, territoryID, resourceName, level)
+local function AddStartingResourceHubLevel(standing, territoryID, level)
     local terr = standing.Territories[territoryID];
     if terr == nil then return; end
+
     local structures = terr.Structures or {};
-    local structureType = RESOURCE_STRUCTURE[resourceName];
-    if structureType ~= nil then
-        structures[structureType] = (structures[structureType] or 0) + level;
-        terr.Structures = structures;
-    end
+
+    structures[RESOURCE_HUB_STRUCTURE] =
+        (structures[RESOURCE_HUB_STRUCTURE] or 0)
+        + math.max(0, tonumber(level) or 0);
+
+    terr.Structures = structures;
 end
 
 local function ShuffleTerritories(list)
@@ -714,7 +710,7 @@ local function InitializeStrategicResources(Game, Standing, economy)
                         local level = math.max(current, strength >= 4 and 2 or 1);
                         economy.resources.territories[territoryID][resourceName] = level;
                         if current == 0 then
-                            AddStartingStructure(Standing, territoryID, resourceName, level);
+                            AddStartingResourceHubLevel(Standing, territoryID, level);
                         end
                     end
                 end

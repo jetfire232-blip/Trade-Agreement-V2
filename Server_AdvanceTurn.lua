@@ -13969,17 +13969,10 @@ local RESOURCE_NAMES = {
     "Coal", "Copper", "Lithium"
 };
 
-local RESOURCE_STRUCTURE = {
-    ["Oil"] = WL.StructureType.Power,
-    ["Gas"] = WL.StructureType.Smelter,
-    ["Uranium"] = WL.StructureType.Draft,
-    ["Iron"] = WL.StructureType.Mine,
-    ["Food"] = WL.StructureType.ArmyCamp,
-    ["Rare Earths"] = WL.StructureType.DigSite,
-    ["Coal"] = WL.StructureType.ResourceCache,
-    ["Copper"] = WL.StructureType.Market,
-    ["Lithium"] = WL.StructureType.Recipe
-};
+-- One resource-hub icon per territory.
+-- The structure count tracks total facility levels across all resources there.
+local RESOURCE_HUB_STRUCTURE =
+    WL.StructureType.ResourceCache;
 
 local function EnsureStrategicResourceState(data)
     local economy = data.globalEconomy;
@@ -14040,8 +14033,11 @@ local function ProcessPendingResourceBuilds(game, data, resourceChanges, addNewO
             nodes = resources.territories[build.territoryID];
             nodes[build.resource] = build.toLevel;
             local terrMod = WL.TerritoryModification.Create(build.territoryID);
+
+            -- Every facility upgrade raises the single visible Resource Hub
+            -- number by one instead of adding another map icon.
             terrMod.AddStructuresOpt = {
-                [RESOURCE_STRUCTURE[build.resource]] = 1
+                [RESOURCE_HUB_STRUCTURE] = 1
             };
             local event = WL.GameOrderEvent.Create(
                 build.playerID,

@@ -2976,11 +2976,6 @@ function ShowResourcesMenu(parent, game)
         return;
     end
 
-    UI.CreateLabel(area).SetText(
-        "Slot Profile: " .. tostring(nation.resourceProfile or "Not assigned") ..
-        " | Slot: " .. tostring(nation.resourceSlot or "-")
-    );
-
     UI.CreateLabel(area).SetText("Production / Turn");
     UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceProduction));
     UI.CreateLabel(area).SetText("Effective After Trades");
@@ -3009,7 +3004,7 @@ function ShowResourcesMenu(parent, game)
     UI.CreateLabel(area).SetText("----------------------------------------");
     UI.CreateLabel(area).SetText("DEVELOP RESOURCE FACILITY");
     UI.CreateLabel(area).SetText(
-        "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn and a structure icon remains visible on the map."
+        "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn. Each resource territory shows ONE Resource Hub icon; the number beside it is the total facility/deposit level on that territory."
     );
 
     local selectedResource = "Oil";
@@ -10845,6 +10840,47 @@ function ShowHowItWorks(parent)
             "Completed, failed, and expired projects are removed from the active market but remain stored in the Archive.\n\n" ..
 
             "The archive records the creator, funding, investors, contribution amounts, payouts, turns, result, and resolution roll."
+        );
+
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
+
+    UI.CreateLabel(area)
+        .SetText(
+            "STRATEGIC RESOURCES\n\n" ..
+
+            "Resources are produced by territories you control. Capturing a resource territory transfers its production to the new owner automatically.\n\n" ..
+
+            "Resources are not stockpiled. Each turn, production is calculated, active resource trades are applied, and then shortages are checked.\n\n" ..
+
+            "Existing armies are NEVER removed because of a shortage. Resource shortages affect your future economic and military mobilization capacity instead.\n\n" ..
+
+            "Commerce Example: If your nation earns 400 Commerce and resource shortages create a 10% penalty, the resource system removes 40 Commerce that turn.\n\n" ..
+
+            "Military Readiness is a national indicator from 50% to 100%. Oil, Food, Iron, and Gas shortages lower readiness. A lower value means your country is less prepared to sustain new military mobilization; it does not destroy armies already on the map.\n\n" ..
+
+            "RESOURCE ROLES\n" ..
+            "Oil - major military mobilization support.\n" ..
+            "Gas - economy and military support.\n" ..
+            "Food - population, army sustainment, and stability.\n" ..
+            "Iron - military and industrial production.\n" ..
+            "Uranium - strategic / advanced military resource.\n" ..
+            "Rare Earths - advanced technology and military systems.\n" ..
+            "Coal - industrial Commerce.\n" ..
+            "Copper - infrastructure and industry.\n" ..
+            "Lithium - advanced industry and technology.\n\n" ..
+
+            "RESOURCE HUB ICON\n" ..
+            "A resource territory shows one Resource Hub structure icon. The number beside the icon is the TOTAL facility/deposit level on that territory.\n\n" ..
+
+            "Example: A Resource Hub showing 4 could contain Oil level 2, Iron level 1, and Food level 1. The map stays clean while the Resources menu keeps the full breakdown.\n\n" ..
+
+            "RESOURCE TRADE EXAMPLE\n" ..
+            "If France produces extra Oil but lacks Food, it can sell Oil to another nation for gold and buy Food from a different partner. Contracts move current-turn production every turn while active."
         );
 
 
