@@ -4189,6 +4189,50 @@ function ShowResourcesMenu(parent, game)
         "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn. The territory keeps ONE resource icon; its dominant resource controls the icon design and the badge shows total facility/deposit level."
     );
 
+    local facilityBaseCost =
+        math.max(
+            1,
+            math.floor(
+                tonumber(
+                    GetClientSetting(
+                        "ResourceFacilityBaseCost",
+                        100
+                    )
+                )
+                or 100
+            )
+        );
+
+    local facilityMaxLevel =
+        math.max(
+            1,
+            math.floor(
+                tonumber(
+                    GetClientSetting(
+                        "ResourceFacilityMaxLevel",
+                        3
+                    )
+                )
+                or 3
+            )
+        );
+
+    local costParts = {
+        "New facility: " .. tostring(facilityBaseCost * 3) .. " gold"
+    };
+
+    for level = 1, facilityMaxLevel - 1 do
+        table.insert(
+            costParts,
+            "Level " .. tostring(level) .. " -> " .. tostring(level + 1)
+                .. ": " .. tostring(facilityBaseCost * (level + 1)) .. " gold"
+        );
+    end
+
+    UI.CreateLabel(area).SetText(
+        "Development Costs | " .. table.concat(costParts, " | ")
+    );
+
     local selectedResource = "Oil";
     local selectedLabel = UI.CreateLabel(area).SetText("Selected Resource: Oil");
 

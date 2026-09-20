@@ -16186,6 +16186,42 @@ local function ProcessWarEvents(
         end
     end
 
+    -- Human players have one turn to answer a war event.  If they do not,
+    -- automatically apply the neutral/balanced response so events cannot remain
+    -- pending forever or block later wartime decisions.
+    for playerID, nation in pairs(economy.nations or {}) do
+        EnsureWarEventNationState(nation);
+        local pending = nation.pendingWarEvent;
+        local player = game.Game.Players[playerID];
+        if pending ~= nil
+            and player ~= nil
+            and player.IsAI ~= true
+            and currentTurn > (pending.createdTurn or currentTurn)
+        then
+            local commerce = math.max(1, GetCommerceIncome(game, playerID));
+            local cost = math.max(10, math.floor(commerce * 0.03 + 0.5));
+            ApplyWarEventConsequence(
+                game,
+                data,
+                resourceChanges,
+                playerID,
+                nation,
+                {
+                    eventID = pending.id,
+                    warKey = pending.warKey,
+                    otherPlayerID = pending.otherPlayerID,
+                    choice = "AUTO_BALANCED_RESPONSE",
+                    goldDelta = -cost,
+                    unrestDelta = 0,
+                    readinessModifier = 5,
+                    readinessDuration = 2,
+                    message = "No wartime choice was submitted in time. A balanced response was selected automatically."
+                }
+            );
+            nation.pendingWarEvent = nil;
+        end
+    end
+
     -- Generate at most one unresolved event per human nation.  This keeps the
     -- system useful in Mega Games without creating a message storm.
     for relationshipKey, relationship in pairs(diplomacy.relationships or {}) do
@@ -17227,14 +17263,6 @@ then
 
 end
 
-RecordWarCombatStats(
-    data,
-    attackerID,
-    defenderID,
-    result
-);
-
-
     -- =====================================================
     -- OFFICIAL WAR CHECK
     -- =====================================================
@@ -17328,6 +17356,18 @@ end
 
     end
 
+    -- Record only attacks that survived all diplomacy / AI guardrails.
+    RecordWarCombatStats(
+        data,
+        attackerID,
+        defenderID,
+        result
+    );
+
+    -- Server_AdvanceTurn_Order runs independently from the turn-start hook.
+    -- Persist the updated war statistics so Current Wars can display them.
+    Mod.PublicGameData = data;
+
     return;
 
 end
@@ -17351,6 +17391,58 @@ end
     );
 
 end
+-- =========================================================
+-- RESOURCE OWNERSHIP SNAPSHOT
+-- =========================================================
+-- Refreshes visible per-turn production after all attacks/captures resolve.
+-- Full trade / shortage / readiness processing still occurs once at the next
+-- normal resource-processing pass, avoiding double charging or duplicate trades.
+
+local function RefreshStrategicResourceOwnershipSnapshot(
+    game,
+    data
+)
+    local resources = EnsureStrategicResourceState(data);
+    local economy = data and data.globalEconomy or nil;
+    if resources == nil or resources.enabled ~= true or economy == nil then
+        return;
+    end
+
+    local standing = game.ServerGame and game.ServerGame.LatestTurnStanding;
+    if standing == nil or standing.Territories == nil then
+        return;
+    end
+
+    for _, nation in pairs(economy.nations or {}) do
+        EnsureNationResourceState(nation);
+        nation.resourceProduction = EmptyResourceTable();
+    end
+
+    for territoryID, nodes in pairs(resources.territories or {}) do
+        local numericID = tonumber(territoryID) or territoryID;
+        local terr = standing.Territories[numericID];
+        local owner = terr and terr.OwnerPlayerID or nil;
+        local nation = owner and economy.nations[owner] or nil;
+        if nation ~= nil and nation.eliminated ~= true then
+            for resourceName, level in pairs(nodes or {}) do
+                nation.resourceProduction[resourceName] =
+                    (nation.resourceProduction[resourceName] or 0)
+                    + (tonumber(level) or 0);
+            end
+        end
+    end
+
+    -- Keep the UI snapshot coherent immediately after the capture.  The next
+    -- resource-processing pass will apply contracts, shortages and readiness.
+    for _, nation in pairs(economy.nations or {}) do
+        nation.resourceEffective = nation.resourceEffective or {};
+        for _, resourceName in ipairs(RESOURCE_NAMES) do
+            nation.resourceEffective[resourceName] =
+                nation.resourceProduction[resourceName] or 0;
+        end
+    end
+end
+
 -- =========================================================
 -- END-OF-TURN DIPLOMACY
 -- =========================================================
@@ -17381,6 +17473,12 @@ function Server_AdvanceTurn_End(
         data
     );
 
+    -- Captured resource territories should be reflected in the UI as soon as
+    -- the turn finishes instead of appearing one full turn late.
+    RefreshStrategicResourceOwnershipSnapshot(
+        game,
+        data
+    );
 
     Mod.PublicGameData =
         data;
