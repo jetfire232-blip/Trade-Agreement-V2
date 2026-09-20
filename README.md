@@ -13,3 +13,11 @@ V3 adds an optional host-controlled United Nations system with configurable perm
 ## Resource Map Display
 
 All strategic resources use one shared Resource Hub structure icon on the map. The number beside the icon is the combined facility/deposit level on that territory. The host may disable Resource Hub map icons globally while leaving the resource economy active. Players may independently hide the Resources menu tab, but War.app native territory structures cannot currently be hidden for only one player.
+
+## V3 Phase 6-7 additions
+
+- Current Wars dashboard with war start turn, duration, attacks, combat losses, territory captures, and direct wartime decision costs.
+- Interactive War Events with Full Mobilization, Ration Supplies, and Protect Economy choices. Pop-up alerts can be hidden per player without disabling the event system.
+- UN proposal cooldown is shown live in the Security Council screen, and every resolution type now displays its exact effect before submission.
+- Resource map display now uses distinct custom icons for Oil, Gas, Uranium, Iron, Food, Rare Earths, Coal, Copper, and Lithium. Each territory displays exactly one resource icon, selected from its dominant resource, with a baked-in badge showing the combined resource facility level.
+- Expanded How It Works guide with Quick Start, examples, resource roles, icon legend, wartime events, Current Wars, AI Manager, markets, taxation/ideology, UN consequences, and host configuration guidance.

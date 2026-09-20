@@ -10568,6 +10568,161 @@ end
 
 
     -- =====================================================
+    -- PLAYER WAR EVENT ALERT PREFERENCE
+    -- =====================================================
+
+    if payload.type == "setWarEventAlerts" then
+
+        local nation =
+            EnsureNation(
+                data,
+                game,
+                playerID
+            );
+
+        nation.showWarEventAlerts =
+            payload.enabled == true;
+
+        Mod.PublicGameData =
+            data;
+
+        setReturn({
+            success = true,
+            message = nation.showWarEventAlerts
+                and "War event pop-up alerts enabled."
+                or "War event pop-up alerts hidden. Events remain available in Diplomacy."
+        });
+
+        return;
+    end
+
+
+    -- =====================================================
+    -- INTERACTIVE WAR EVENT CHOICE
+    -- =====================================================
+
+    if payload.type == "resolveWarEvent" then
+
+        if GetSetting("WarEventsEnabled", true) ~= true then
+            setReturn({success=false, message="Wartime events are disabled by the host."});
+            return;
+        end
+
+        local nation =
+            EnsureNation(
+                data,
+                game,
+                playerID
+            );
+
+        local event =
+            nation.pendingWarEvent;
+
+        local eventID =
+            MakeInteger(
+                payload.eventID
+            );
+
+        if event == nil
+            or eventID == nil
+            or event.id ~= eventID
+        then
+            setReturn({success=false, message="This wartime event is no longer available."});
+            return;
+        end
+
+        local choice =
+            tostring(
+                payload.choice
+                or ""
+            );
+
+        local commerce =
+            math.max(
+                1,
+                GetCommerceIncome(
+                    game,
+                    playerID
+                )
+            );
+
+        local consequence = {
+            eventID = event.id,
+            warKey = event.warKey,
+            otherPlayerID = event.otherPlayerID,
+            choice = choice,
+            readinessDuration = 2,
+            goldDelta = 0,
+            unrestDelta = 0,
+            readinessModifier = 0,
+            message = ""
+        };
+
+        if choice == "FULL_MOBILIZATION" then
+
+            local cost =
+                math.max(
+                    25,
+                    math.floor(
+                        commerce * 0.08 + 0.5
+                    )
+                );
+
+            consequence.goldDelta = -cost;
+            consequence.readinessModifier = 10;
+            consequence.unrestDelta = 2;
+            consequence.message =
+                "Full Mobilization selected: -"
+                .. tostring(cost)
+                .. " Commerce next turn, +10 Military Readiness for 2 turns, +2 Unrest.";
+
+        elseif choice == "RATION_SUPPLIES" then
+
+            local cost =
+                math.max(
+                    10,
+                    math.floor(
+                        commerce * 0.03 + 0.5
+                    )
+                );
+
+            consequence.goldDelta = -cost;
+            consequence.readinessModifier = 5;
+            consequence.unrestDelta = 5;
+            consequence.message =
+                "Ration Supplies selected: -"
+                .. tostring(cost)
+                .. " Commerce next turn, +5 Military Readiness for 2 turns, +5 Unrest.";
+
+        elseif choice == "PROTECT_ECONOMY" then
+
+            consequence.goldDelta = 0;
+            consequence.readinessModifier = -8;
+            consequence.unrestDelta = -2;
+            consequence.message =
+                "Protect Economy selected: no direct Commerce cost, -8 Military Readiness for 2 turns, -2 Unrest.";
+
+        else
+            setReturn({success=false, message="Invalid wartime event choice."});
+            return;
+        end
+
+        nation.pendingWarEvent = nil;
+        nation.pendingWarEventConsequence = consequence;
+
+        Mod.PublicGameData =
+            data;
+
+        setReturn({
+            success = true,
+            message = consequence.message
+        });
+
+        return;
+    end
+
+
+    -- =====================================================
     -- UNITED NATIONS RESOLUTION PROPOSAL
     -- =====================================================
 

@@ -279,6 +279,20 @@ function Client_PresentConfigureUI(rootParent)
             3
         );
 
+    local warEventsEnabled =
+        GetBoolSetting(
+            settings,
+            "WarEventsEnabled",
+            true
+        );
+
+    local warEventFrequencyTurns =
+        GetNumberSetting(
+            settings,
+            "WarEventFrequencyTurns",
+            3
+        );
+
     local nonAggressionPactsEnabled =
         GetBoolSetting(
             settings,
@@ -789,6 +803,23 @@ function Client_PresentConfigureUI(rootParent)
         0,
         10,
         "Prevents repeated peace-war-peace abuse."
+    );
+
+    AddCheckBox(
+        root,
+        "WarEventsEnabled",
+        "Enable interactive wartime national events",
+        warEventsEnabled
+    );
+
+    AddNumberInput(
+        root,
+        "WarEventFrequencyTurns",
+        "Turns Between Wartime Decision Events",
+        warEventFrequencyTurns,
+        1,
+        10,
+        "Default: 3. Human players receive strategic choices; AI nations resolve a balanced response automatically."
     );
 
     AddCheckBox(

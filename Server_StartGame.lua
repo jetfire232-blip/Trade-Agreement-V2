@@ -350,6 +350,18 @@ local function CreateDefaultNationState(
     nation.lastTurnReportSeen =
         0;
 
+    -- =====================================================
+    -- WAR EVENT / PLAYER NOTIFICATION PREFERENCES
+    -- =====================================================
+
+    nation.showWarEventAlerts = true;
+    nation.pendingWarEvent = nil;
+    nation.lastWarEventTurn = 0;
+    nation.warEventReadinessModifier = 0;
+    nation.warEventReadinessUntilTurn = 0;
+    nation.pendingWarEventGoldDelta = 0;
+    nation.pendingWarEventUnrestDelta = 0;
+
 
     return nation;
 end
@@ -392,7 +404,10 @@ local function CreateGlobalState()
             relationships = {},
             warHistory = {},
             peaceHistory = {},
-            nonAggressionPacts = {}
+            nonAggressionPacts = {},
+            warStats = {},
+            warEventHistory = {},
+            nextWarEventID = 1
         };
 
 
@@ -576,11 +591,49 @@ local RESOURCE_ORDER = {
     "Lithium"
 };
 
--- One map icon per resource territory.
--- The structure count is the total facility/deposit level on that territory,
--- so War.app renders a single icon with a number beside it (city-style).
-local RESOURCE_HUB_STRUCTURE =
-    WL.StructureType.ResourceCache;
+-- One custom map icon per resource territory.
+-- The icon family identifies the dominant resource, while the badge baked into
+-- the image shows the combined facility/deposit level.  We always place exactly
+-- one custom structure so territories never get clogged by repeated icons.
+local RESOURCE_ICON_SAFE_NAMES = {
+    Oil = "Oil",
+    Gas = "Gas",
+    Uranium = "Uranium",
+    Iron = "Iron",
+    Food = "Food",
+    ["Rare Earths"] = "RareEarths",
+    Coal = "Coal",
+    Copper = "Copper",
+    Lithium = "Lithium"
+};
+
+local function ResourceIconStructure(resourceName, totalLevel)
+    local safe = RESOURCE_ICON_SAFE_NAMES[resourceName] or "Oil";
+    local level = math.max(1, math.floor(tonumber(totalLevel) or 1));
+    local suffix = level > 9 and "9plus" or tostring(level);
+    return WL.StructureType.Custom("Resource" .. safe .. suffix);
+end
+
+local function GetPrimaryResource(nodes)
+    local bestName = nil;
+    local bestLevel = -1;
+    for _, resourceName in ipairs(RESOURCE_ORDER) do
+        local level = tonumber((nodes or {})[resourceName]) or 0;
+        if level > bestLevel then
+            bestName = resourceName;
+            bestLevel = level;
+        end
+    end
+    return bestName or "Oil";
+end
+
+local function GetTotalResourceLevel(nodes)
+    local total = 0;
+    for _, resourceName in ipairs(RESOURCE_ORDER) do
+        total = total + math.max(0, tonumber((nodes or {})[resourceName]) or 0);
+    end
+    return total;
+end
 
 -- Slot profiles are deliberately broad 2026 strategic-production strengths,
 -- not literal extraction tonnage.  They are used to decide how many deposits
@@ -634,15 +687,23 @@ local function GetResourceProfile(slot)
     };
 end
 
-local function AddStartingResourceHubLevel(standing, territoryID, level)
+local function RefreshStartingResourceIcon(standing, resources, territoryID)
     local terr = standing.Territories[territoryID];
-    if terr == nil then return; end
+    local nodes = resources.territories[territoryID];
+    if terr == nil or nodes == nil then return; end
 
     local structures = terr.Structures or {};
 
-    structures[RESOURCE_HUB_STRUCTURE] =
-        (structures[RESOURCE_HUB_STRUCTURE] or 0)
-        + math.max(0, tonumber(level) or 0);
+    -- Remove legacy ResourceCache icons from earlier V3 resource builds.
+    structures[WL.StructureType.ResourceCache] = nil;
+
+    -- Fresh games do not yet contain our custom structures, so one assignment is
+    -- enough.  The selected image already includes the numeric level badge.
+    local totalLevel = GetTotalResourceLevel(nodes);
+    if totalLevel > 0 then
+        local primary = GetPrimaryResource(nodes);
+        structures[ResourceIconStructure(primary, totalLevel)] = 1;
+    end
 
     terr.Structures = structures;
 end
@@ -710,14 +771,17 @@ local function InitializeStrategicResources(Game, Standing, economy)
                         local current = economy.resources.territories[territoryID][resourceName] or 0;
                         local level = math.max(current, strength >= 4 and 2 or 1);
                         economy.resources.territories[territoryID][resourceName] = level;
-                        if current == 0
-                            and economy.resources.mapIconsEnabled ~= false
-                        then
-                            AddStartingResourceHubLevel(Standing, territoryID, level);
-                        end
+                        -- Map icon is refreshed once after all resources are seeded
+                        -- so a multi-resource territory still receives only one icon.
                     end
                 end
             end
+        end
+    end
+
+    if economy.resources.mapIconsEnabled ~= false then
+        for territoryID, _ in pairs(economy.resources.territories or {}) do
+            RefreshStartingResourceIcon(Standing, economy.resources, territoryID);
         end
     end
 end

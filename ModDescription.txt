@@ -229,3 +229,21 @@ When enabled by the host, territories may contain strategic Resource Hubs. Oil, 
 UNITED NATIONS / SECURITY COUNCIL
 
 When enabled by the host, the United Nations creates a Security Council with configurable permanent and rotating seats. Permanent members have veto power. Initial resolution types include sanctions, embargoes, aid, condemnations, and ceasefires. AI council members vote automatically while human council members vote through the mod menu.
+
+V3 PHASE 6-7
+
+CURRENT WARS AND WAR EVENTS
+- Diplomacy now includes a Current Wars dashboard with war duration, attacks, combat losses, territory captures, and direct wartime decision costs.
+- Human nations periodically receive wartime strategic choices when enabled by the host.
+- Players may hide War Event pop-up alerts while keeping the underlying event choices active in Diplomacy.
+
+RESOURCE MAP POLISH
+- Resource territories use distinct resource-specific custom icons.
+- Only one resource icon is shown per territory. The dominant resource controls the icon and a numeric badge shows the combined facility/deposit level.
+
+UN POLISH
+- Proposal cooldown status is shown live to each player.
+- Sanctions, Embargo, Aid, Condemnation, and Ceasefire show their exact consequences before submission.
+
+HOW IT WORKS
+- Expanded into a full player learning guide with examples and an icon legend.

@@ -3037,6 +3037,32 @@ function ActivateDiplomacyWar(
             playerB
         );
 
+    diplomacy.warStats = diplomacy.warStats or {};
+    diplomacy.warEventHistory = diplomacy.warEventHistory or {};
+    diplomacy.nextWarEventID = diplomacy.nextWarEventID or 1;
+
+    diplomacy.warStats[key] = {
+        key = key,
+        player1 = playerA,
+        player2 = playerB,
+        startTurn = currentTurn,
+        endTurn = nil,
+        active = true,
+        attacks = 0,
+        casualties = {
+            [tostring(playerA)] = 0,
+            [tostring(playerB)] = 0
+        },
+        territoriesCaptured = {
+            [tostring(playerA)] = 0,
+            [tostring(playerB)] = 0
+        },
+        economicImpact = {
+            [tostring(playerA)] = 0,
+            [tostring(playerB)] = 0
+        }
+    };
+
 
     diplomacy.pendingWarDeclarations[
         key
@@ -3214,6 +3240,13 @@ function ActivateDiplomacyPeace(
             playerA,
             playerB
         );
+
+    diplomacy.warStats = diplomacy.warStats or {};
+    local warStats = diplomacy.warStats[key];
+    if warStats ~= nil then
+        warStats.active = false;
+        warStats.endTurn = currentTurn;
+    end
 
 
     diplomacy.pendingWarDeclarations[
@@ -13988,10 +14021,74 @@ local RESOURCE_NAMES = {
     "Coal", "Copper", "Lithium"
 };
 
--- One resource-hub icon per territory.
--- The structure count tracks total facility levels across all resources there.
-local RESOURCE_HUB_STRUCTURE =
-    WL.StructureType.ResourceCache;
+-- Resource map display uses one custom structure per territory.
+-- The dominant resource selects the icon family and the image contains a
+-- numeric badge for the combined facility level.  This avoids icon spam.
+local RESOURCE_ICON_SAFE_NAMES = {
+    Oil = "Oil", Gas = "Gas", Uranium = "Uranium", Iron = "Iron",
+    Food = "Food", ["Rare Earths"] = "RareEarths", Coal = "Coal",
+    Copper = "Copper", Lithium = "Lithium"
+};
+
+local function ResourceIconStructure(resourceName, totalLevel)
+    local safe = RESOURCE_ICON_SAFE_NAMES[resourceName] or "Oil";
+    local level = math.max(1, math.floor(tonumber(totalLevel) or 1));
+    local suffix = level > 9 and "9plus" or tostring(level);
+    return WL.StructureType.Custom("Resource" .. safe .. suffix);
+end
+
+local function GetPrimaryResource(nodes)
+    local bestName = nil;
+    local bestLevel = -1;
+    for _, resourceName in ipairs(RESOURCE_NAMES) do
+        local level = tonumber((nodes or {})[resourceName]) or 0;
+        if level > bestLevel then
+            bestName = resourceName;
+            bestLevel = level;
+        end
+    end
+    return bestName or "Oil";
+end
+
+local function GetTotalResourceLevel(nodes)
+    local total = 0;
+    for _, resourceName in ipairs(RESOURCE_NAMES) do
+        total = total + math.max(0, tonumber((nodes or {})[resourceName]) or 0);
+    end
+    return total;
+end
+
+local function IsResourceCustomStructure(structureType)
+    for _, safe in pairs(RESOURCE_ICON_SAFE_NAMES) do
+        for level = 1, 9 do
+            if structureType == WL.StructureType.Custom("Resource" .. safe .. tostring(level)) then
+                return true;
+            end
+        end
+        if structureType == WL.StructureType.Custom("Resource" .. safe .. "9plus") then
+            return true;
+        end
+    end
+    return false;
+end
+
+local function BuildResourceIconStructureTable(existingStructures, nodes)
+    local structures = {};
+    for structureType, count in pairs(existingStructures or {}) do
+        if structureType ~= WL.StructureType.ResourceCache
+            and not IsResourceCustomStructure(structureType)
+        then
+            structures[structureType] = count;
+        end
+    end
+
+    local totalLevel = GetTotalResourceLevel(nodes);
+    if totalLevel > 0 then
+        local primary = GetPrimaryResource(nodes);
+        structures[ResourceIconStructure(primary, totalLevel)] = 1;
+    end
+    return structures;
+end
 
 local function EnsureStrategicResourceState(data)
     local economy = data.globalEconomy;
@@ -14058,15 +14155,17 @@ local function ProcessPendingResourceBuilds(game, data, resourceChanges, addNewO
             nodes[build.resource] = build.toLevel;
             local terrMod = WL.TerritoryModification.Create(build.territoryID);
 
-            -- Every resource type shares this one Resource Hub structure.
-            -- If map icons are disabled by the host, resources still function
-            -- but no native structure is added.
+            -- Refresh the single resource icon after the upgrade.  The dominant
+            -- resource chooses the icon and the total facility level is baked into
+            -- the icon badge, so the territory always shows exactly one resource icon.
             if resources.mapIconsEnabled ~= false
                 and GetSetting("ResourceMapIconsEnabled", true) == true
             then
-                terrMod.AddStructuresOpt = {
-                    [RESOURCE_HUB_STRUCTURE] = 1
-                };
+                terrMod.SetStructuresOpt =
+                    BuildResourceIconStructureTable(
+                        terr.Structures or {},
+                        nodes
+                    );
             end
 
             local event = WL.GameOrderEvent.Create(
@@ -14394,6 +14493,33 @@ local function ProcessStrategicResources(game, data, resourceChanges)
                         readinessPenalty
                     )
                 );
+
+            -- Wartime decisions can temporarily raise or lower readiness without
+            -- ever deleting armies already on the map.
+            local warEventUntil =
+                tonumber(
+                    nation.warEventReadinessUntilTurn
+                )
+                or 0;
+
+            if warEventUntil >= (data.tradeTurn or 0) then
+
+                nation.resourceMilitaryReadiness =
+                    math.max(
+                        50,
+                        math.min(
+                            100,
+                            nation.resourceMilitaryReadiness
+                            + (tonumber(nation.warEventReadinessModifier) or 0)
+                        )
+                    );
+
+            else
+
+                nation.warEventReadinessModifier = 0;
+                nation.warEventReadinessUntilTurn = 0;
+
+            end
 
             nation.resourceMobilizationPenaltyPercent =
                 100
@@ -15938,6 +16064,220 @@ end
 
 
 -- =========================================================
+-- CURRENT WARS / INTERACTIVE WAR EVENTS
+-- =========================================================
+
+local function EnsureWarEventNationState(nation)
+    if nation == nil then return; end
+    if nation.showWarEventAlerts == nil then nation.showWarEventAlerts = true; end
+    nation.lastWarEventTurn = nation.lastWarEventTurn or 0;
+    nation.warEventReadinessModifier = nation.warEventReadinessModifier or 0;
+    nation.warEventReadinessUntilTurn = nation.warEventReadinessUntilTurn or 0;
+end
+
+local function AddWarEventHistory(diplomacy, entry)
+    diplomacy.warEventHistory = diplomacy.warEventHistory or {};
+    table.insert(diplomacy.warEventHistory, 1, entry);
+    while #diplomacy.warEventHistory > 80 do
+        table.remove(diplomacy.warEventHistory);
+    end
+end
+
+local function ApplyWarEventConsequence(
+    game,
+    data,
+    resourceChanges,
+    playerID,
+    nation,
+    consequence
+)
+    if nation == nil or consequence == nil then return; end
+
+    local currentTurn = data.tradeTurn or 0;
+    local goldDelta = math.floor(tonumber(consequence.goldDelta) or 0);
+    local unrestDelta = math.floor(tonumber(consequence.unrestDelta) or 0);
+    local readinessModifier = math.floor(tonumber(consequence.readinessModifier) or 0);
+    local readinessDuration = math.max(0, math.floor(tonumber(consequence.readinessDuration) or 0));
+
+    if goldDelta ~= 0 then
+        AddResourceChange(resourceChanges, playerID, goldDelta);
+    end
+
+    if unrestDelta ~= 0 then
+        nation.resourceUnrest = math.max(
+            0,
+            math.min(
+                100,
+                (nation.resourceUnrest or 0) + unrestDelta
+            )
+        );
+    end
+
+    if readinessModifier ~= 0 and readinessDuration > 0 then
+        nation.warEventReadinessModifier = readinessModifier;
+        nation.warEventReadinessUntilTurn = currentTurn + readinessDuration;
+    end
+
+    local diplomacy = GetDiplomacyData(data);
+    diplomacy.warStats = diplomacy.warStats or {};
+    local warKey = consequence.warKey;
+    local stats = warKey and diplomacy.warStats[warKey] or nil;
+    if stats ~= nil then
+        stats.economicImpact = stats.economicImpact or {};
+        if goldDelta < 0 then
+            stats.economicImpact[tostring(playerID)] =
+                (stats.economicImpact[tostring(playerID)] or 0) + math.abs(goldDelta);
+        end
+    end
+
+    AddWarEventHistory(
+        diplomacy,
+        {
+            id = consequence.eventID,
+            turn = currentTurn,
+            playerID = playerID,
+            otherPlayerID = consequence.otherPlayerID,
+            warKey = warKey,
+            choice = consequence.choice,
+            message = consequence.message or "Wartime decision resolved."
+        }
+    );
+end
+
+local function ProcessWarEvents(
+    game,
+    data,
+    resourceChanges
+)
+    if GetSetting("WarEventsEnabled", true) ~= true then
+        return;
+    end
+
+    local economy = data.globalEconomy;
+    if economy == nil then return; end
+
+    local diplomacy = GetDiplomacyData(data);
+    diplomacy.warStats = diplomacy.warStats or {};
+    diplomacy.warEventHistory = diplomacy.warEventHistory or {};
+    diplomacy.nextWarEventID = diplomacy.nextWarEventID or 1;
+
+    local currentTurn = data.tradeTurn or 0;
+    local frequency = math.max(
+        1,
+        math.min(
+            10,
+            math.floor(tonumber(GetSetting("WarEventFrequencyTurns", 3)) or 3)
+        )
+    );
+
+    -- Apply choices made since the previous turn.
+    for playerID, nation in pairs(economy.nations or {}) do
+        EnsureWarEventNationState(nation);
+        if nation.pendingWarEventConsequence ~= nil then
+            ApplyWarEventConsequence(
+                game,
+                data,
+                resourceChanges,
+                playerID,
+                nation,
+                nation.pendingWarEventConsequence
+            );
+            nation.pendingWarEventConsequence = nil;
+        end
+    end
+
+    -- Generate at most one unresolved event per human nation.  This keeps the
+    -- system useful in Mega Games without creating a message storm.
+    for relationshipKey, relationship in pairs(diplomacy.relationships or {}) do
+        if relationship ~= nil and relationship.status == "war" then
+            local player1 = relationship.player1;
+            local player2 = relationship.player2;
+
+            if player1 ~= nil and player2 ~= nil then
+                local warKey = EconomyPairKey(player1, player2);
+                local stats = diplomacy.warStats[warKey];
+                if stats == nil then
+                    stats = {
+                        key = warKey,
+                        player1 = player1,
+                        player2 = player2,
+                        startTurn = relationship.sinceTurn or currentTurn,
+                        active = true,
+                        attacks = 0,
+                        casualties = {},
+                        territoriesCaptured = {},
+                        economicImpact = {}
+                    };
+                    diplomacy.warStats[warKey] = stats;
+                else
+                    stats.active = true;
+                end
+
+                for _, participantID in ipairs({player1, player2}) do
+                    local nation = economy.nations[participantID];
+                    local player = game.Game.Players[participantID];
+
+                    if nation ~= nil
+                        and nation.eliminated ~= true
+                        and player ~= nil
+                    then
+                        EnsureWarEventNationState(nation);
+
+                        local due =
+                            nation.pendingWarEvent == nil
+                            and (
+                                currentTurn == (stats.startTurn or currentTurn)
+                                or currentTurn - (nation.lastWarEventTurn or 0) >= frequency
+                            );
+
+                        if due then
+                            local otherPlayerID = participantID == player1 and player2 or player1;
+                            local eventID = diplomacy.nextWarEventID;
+                            diplomacy.nextWarEventID = eventID + 1;
+                            nation.lastWarEventTurn = currentTurn;
+
+                            if player.IsAI == true then
+                                local commerce = math.max(1, GetCommerceIncome(game, participantID));
+                                local cost = math.max(10, math.floor(commerce * 0.03 + 0.5));
+                                ApplyWarEventConsequence(
+                                    game,
+                                    data,
+                                    resourceChanges,
+                                    participantID,
+                                    nation,
+                                    {
+                                        eventID = eventID,
+                                        warKey = warKey,
+                                        otherPlayerID = otherPlayerID,
+                                        choice = "BALANCED_RESPONSE",
+                                        goldDelta = -cost,
+                                        unrestDelta = 0,
+                                        readinessModifier = 5,
+                                        readinessDuration = 2,
+                                        message = "AI selected a balanced wartime mobilization response."
+                                    }
+                                );
+                            else
+                                nation.pendingWarEvent = {
+                                    id = eventID,
+                                    warKey = warKey,
+                                    otherPlayerID = otherPlayerID,
+                                    createdTurn = currentTurn,
+                                    title = currentTurn == (stats.startTurn or currentTurn)
+                                        and "WAR MOBILIZATION DECISION"
+                                        or "WARTIME STRATEGY DECISION"
+                                };
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+-- =========================================================
 -- MAIN TURN HOOK
 -- =========================================================
 
@@ -16018,6 +16358,12 @@ function Server_AdvanceTurn_Start(
     ProcessAIDiplomacy(
         game,
         data
+    );
+
+    ProcessWarEvents(
+        game,
+        data,
+        resourceChanges
     );
 
 
@@ -16448,6 +16794,120 @@ end
 -- DIPLOMACY ATTACK ENFORCEMENT
 -- =========================================================
 
+local function RecordWarCombatStats(
+    data,
+    attackerID,
+    defenderID,
+    result
+)
+
+    if data == nil
+        or attackerID == nil
+        or defenderID == nil
+        or result == nil
+        or result.IsAttack ~= true
+    then
+        return;
+    end
+
+    if not IsDiplomacyWar(
+        data,
+        attackerID,
+        defenderID
+    ) then
+        return;
+    end
+
+    local diplomacy =
+        GetDiplomacyData(
+            data
+        );
+
+    diplomacy.warStats =
+        diplomacy.warStats
+        or {};
+
+    local key =
+        EconomyPairKey(
+            attackerID,
+            defenderID
+        );
+
+    local stats =
+        diplomacy.warStats[
+            key
+        ];
+
+    if stats == nil then
+
+        local relationship =
+            GetDiplomacyRelationship(
+                data,
+                attackerID,
+                defenderID
+            );
+
+        stats = {
+            key = key,
+            player1 = attackerID,
+            player2 = defenderID,
+            startTurn = relationship.sinceTurn or (data.tradeTurn or 0),
+            active = true,
+            attacks = 0,
+            casualties = {},
+            territoriesCaptured = {},
+            economicImpact = {}
+        };
+
+        diplomacy.warStats[key] =
+            stats;
+
+    end
+
+    stats.attacks =
+        (stats.attacks or 0)
+        + 1;
+
+    stats.casualties =
+        stats.casualties
+        or {};
+
+    stats.territoriesCaptured =
+        stats.territoriesCaptured
+        or {};
+
+    local attackerLosses = 0;
+    local defenderLosses = 0;
+
+    if result.AttackingArmiesKilled ~= nil then
+        attackerLosses =
+            result.AttackingArmiesKilled.NumArmies
+            or 0;
+    end
+
+    if result.DefendingArmiesKilled ~= nil then
+        defenderLosses =
+            result.DefendingArmiesKilled.NumArmies
+            or 0;
+    end
+
+    stats.casualties[tostring(attackerID)] =
+        (stats.casualties[tostring(attackerID)] or 0)
+        + math.max(0, attackerLosses);
+
+    stats.casualties[tostring(defenderID)] =
+        (stats.casualties[tostring(defenderID)] or 0)
+        + math.max(0, defenderLosses);
+
+    if result.IsSuccessful == true then
+        stats.territoriesCaptured[tostring(attackerID)] =
+            (stats.territoriesCaptured[tostring(attackerID)] or 0)
+            + 1;
+    end
+
+end
+
+
 function Server_AdvanceTurn_Order(
     game,
     order,
@@ -16766,6 +17226,13 @@ then
     return;
 
 end
+
+RecordWarCombatStats(
+    data,
+    attackerID,
+    defenderID,
+    result
+);
 
 
     -- =====================================================

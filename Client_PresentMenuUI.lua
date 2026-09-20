@@ -941,6 +941,304 @@ end
             "----------------------------------------"
         );
 
+    -- =====================================================
+    -- CURRENT WARS / WAR EVENT CENTER
+    -- =====================================================
+
+    UI.CreateLabel(area)
+        .SetText(
+            "CURRENT WARS"
+        );
+
+    local warStats =
+        diplomacy.warStats
+        or {};
+
+    local currentTurn =
+        data.tradeTurn
+        or economy.currentEconomyTurn
+        or 0;
+
+    local activeWarCount = 0;
+
+    for relationshipKey, relationship
+        in pairs(
+            relationships
+        )
+    do
+
+        if relationship ~= nil
+            and relationship.status == "war"
+            and relationship.player1 ~= nil
+            and relationship.player2 ~= nil
+        then
+
+            activeWarCount =
+                activeWarCount
+                + 1;
+
+            local player1 = relationship.player1;
+            local player2 = relationship.player2;
+            local key = tostring(relationshipKey);
+            local stats = warStats[key] or {};
+
+            local startTurn =
+                stats.startTurn
+                or relationship.sinceTurn
+                or currentTurn;
+
+            local duration =
+                math.max(
+                    1,
+                    currentTurn
+                    - startTurn
+                    + 1
+                );
+
+            local row =
+                UI.CreateHorizontalLayoutGroup(
+                    area
+                );
+
+            UI.CreateLabel(row)
+                .SetText(
+                    GetPlayerName(game, player1)
+                )
+                .SetColor(
+                    GetPlayerUIColor(game, player1, "#FFFFFF")
+                )
+                .SetFlexibleWidth(1);
+
+            UI.CreateLabel(row)
+                .SetText(
+                    "vs"
+                );
+
+            UI.CreateLabel(row)
+                .SetText(
+                    GetPlayerName(game, player2)
+                )
+                .SetColor(
+                    GetPlayerUIColor(game, player2, "#FFFFFF")
+                )
+                .SetFlexibleWidth(1);
+
+            local casualties =
+                stats.casualties
+                or {};
+
+            local captures =
+                stats.territoriesCaptured
+                or {};
+
+            local economicImpact =
+                stats.economicImpact
+                or {};
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Started Turn " .. tostring(startTurn)
+                    .. " | Duration: " .. tostring(duration) .. " turn(s)"
+                    .. " | Attacks: " .. tostring(stats.attacks or 0)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Combat losses: "
+                    .. GetPlayerName(game, player1) .. " "
+                    .. tostring(casualties[tostring(player1)] or 0)
+                    .. " | "
+                    .. GetPlayerName(game, player2) .. " "
+                    .. tostring(casualties[tostring(player2)] or 0)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Territories captured: "
+                    .. GetPlayerName(game, player1) .. " "
+                    .. tostring(captures[tostring(player1)] or 0)
+                    .. " | "
+                    .. GetPlayerName(game, player2) .. " "
+                    .. tostring(captures[tostring(player2)] or 0)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Direct wartime decision cost: "
+                    .. GetPlayerName(game, player1) .. " "
+                    .. tostring(economicImpact[tostring(player1)] or 0) .. " gold"
+                    .. " | "
+                    .. GetPlayerName(game, player2) .. " "
+                    .. tostring(economicImpact[tostring(player2)] or 0) .. " gold"
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "--------------------"
+                );
+
+        end
+    end
+
+    if activeWarCount == 0 then
+        UI.CreateLabel(area)
+            .SetText(
+                "No active wars."
+            );
+    end
+
+    local ourNation =
+        (economy.nations or {})[
+            ourID
+        ]
+        or {};
+
+    local pendingWarEvent =
+        ourNation.pendingWarEvent;
+
+    if pendingWarEvent ~= nil then
+
+        UI.CreateLabel(area)
+            .SetText(
+                "WAR EVENT - DECISION REQUIRED"
+            );
+
+        local otherName =
+            pendingWarEvent.otherPlayerID ~= nil
+            and GetPlayerName(
+                game,
+                pendingWarEvent.otherPlayerID
+            )
+            or "Unknown Nation";
+
+        UI.CreateLabel(area)
+            .SetText(
+                tostring(pendingWarEvent.title or "Wartime Strategy Decision")
+                .. "\nWar opponent: " .. tostring(otherName)
+                .. "\nChoose one response. The selected consequence is applied on the next economy turn."
+            );
+
+        local ourCommerce =
+            math.max(
+                1,
+                GetPlayerIncome(
+                    game,
+                    ourID
+                )
+            );
+
+        local fullCost =
+            math.max(
+                25,
+                math.floor(
+                    ourCommerce * 0.08 + 0.5
+                )
+            );
+
+        local rationCost =
+            math.max(
+                10,
+                math.floor(
+                    ourCommerce * 0.03 + 0.5
+                )
+            );
+
+        UI.CreateLabel(area)
+            .SetText(
+                "FULL MOBILIZATION\n-"
+                .. tostring(fullCost)
+                .. " gold next turn | +10 Military Readiness for 2 turns | +2 Unrest"
+            );
+
+        UI.CreateButton(area)
+            .SetText(
+                "CHOOSE FULL MOBILIZATION"
+            )
+            .SetOnClick(function()
+                game.SendGameCustomMessage(
+                    "Resolving war event...",
+                    {
+                        type = "resolveWarEvent",
+                        eventID = pendingWarEvent.id,
+                        choice = "FULL_MOBILIZATION"
+                    },
+                    function(result)
+                        if result ~= nil and result.message ~= nil then
+                            UI.Alert(result.message);
+                        end
+                        ShowDiplomacyMenu(parent, game);
+                    end
+                );
+            end);
+
+        UI.CreateLabel(area)
+            .SetText(
+                "RATION SUPPLIES\n-"
+                .. tostring(rationCost)
+                .. " gold next turn | +5 Military Readiness for 2 turns | +5 Unrest"
+            );
+
+        UI.CreateButton(area)
+            .SetText(
+                "CHOOSE RATION SUPPLIES"
+            )
+            .SetOnClick(function()
+                game.SendGameCustomMessage(
+                    "Resolving war event...",
+                    {
+                        type = "resolveWarEvent",
+                        eventID = pendingWarEvent.id,
+                        choice = "RATION_SUPPLIES"
+                    },
+                    function(result)
+                        if result ~= nil and result.message ~= nil then
+                            UI.Alert(result.message);
+                        end
+                        ShowDiplomacyMenu(parent, game);
+                    end
+                );
+            end);
+
+        UI.CreateLabel(area)
+            .SetText(
+                "PROTECT ECONOMY\nNo direct gold cost | -8 Military Readiness for 2 turns | -2 Unrest"
+            );
+
+        UI.CreateButton(area)
+            .SetText(
+                "CHOOSE PROTECT ECONOMY"
+            )
+            .SetOnClick(function()
+                game.SendGameCustomMessage(
+                    "Resolving war event...",
+                    {
+                        type = "resolveWarEvent",
+                        eventID = pendingWarEvent.id,
+                        choice = "PROTECT_ECONOMY"
+                    },
+                    function(result)
+                        if result ~= nil and result.message ~= nil then
+                            UI.Alert(result.message);
+                        end
+                        ShowDiplomacyMenu(parent, game);
+                    end
+                );
+            end);
+
+    else
+
+        UI.CreateLabel(area)
+            .SetText(
+                "War Events: No decision currently pending."
+            );
+
+    end
+
+    UI.CreateLabel(area)
+        .SetText(
+            "----------------------------------------"
+        );
+
 
     UI.CreateLabel(area)
         .SetText(
@@ -2841,6 +3139,27 @@ function ShowUnitedNationsMenu(parent, game)
         data.tradeTurn
         or 0;
 
+    local proposalCooldownTurns =
+        GetClientSetting(
+            "UNProposalCooldownTurns",
+            2
+        );
+
+    local lastProposalTurn =
+        (un.lastProposalTurnByPlayer or {})[
+            game.Us.ID
+        ];
+
+    local proposalCooldownRemaining = 0;
+    if lastProposalTurn ~= nil then
+        proposalCooldownRemaining =
+            math.max(
+                0,
+                proposalCooldownTurns
+                - (currentTurn - lastProposalTurn)
+            );
+    end
+
     local startTurn =
         GetClientSetting(
             "UnitedNationsStartTurn",
@@ -3214,6 +3533,26 @@ function ShowUnitedNationsMenu(parent, game)
     local proposalLabel =
         UI.CreateLabel(area);
 
+    local effectLabel =
+        UI.CreateLabel(area);
+
+    local function UNResolutionEffectText(
+        resolutionType
+    )
+        if resolutionType == "sanctions" then
+            return "RESULT IF PASSED: Target loses 10% Commerce each turn for 3 turns.";
+        elseif resolutionType == "embargo" then
+            return "RESULT IF PASSED: Trade Agreement income and Resource Trade deliveries involving the target are paused for 3 turns.";
+        elseif resolutionType == "aid" then
+            return "RESULT IF PASSED: Target immediately receives economic aid equal to 10% of its Commerce income, minimum 50 gold.";
+        elseif resolutionType == "condemnation" then
+            return "RESULT IF PASSED: Target is formally condemned for 3 turns and gains +5 Unrest when the unrest system is active.";
+        elseif resolutionType == "ceasefire" then
+            return "RESULT IF PASSED: Forces peace between the proposer and target if they are currently at war.";
+        end
+        return "";
+    end
+
     local function RefreshProposalLabel()
 
         proposalLabel.SetText(
@@ -3232,9 +3571,33 @@ function ShowUnitedNationsMenu(parent, game)
             )
         );
 
+        effectLabel.SetText(
+            UNResolutionEffectText(
+                selectedType
+            )
+        );
+
     end
 
     RefreshProposalLabel();
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Proposal Cooldown: "
+            .. (
+                proposalCooldownRemaining > 0
+                and (tostring(proposalCooldownRemaining) .. " turn(s) remaining")
+                or "READY"
+            )
+            .. " | Host setting: "
+            .. tostring(proposalCooldownTurns)
+            .. " turn(s) between proposals per player."
+        );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Permanent-member NO votes veto a resolution. Otherwise the configured YES-vote threshold determines passage."
+        );
 
     local typeRow1 =
         UI.CreateHorizontalLayoutGroup(
@@ -3636,6 +3999,29 @@ function ShowCustomizeTabs(
                 PlayerTabVisibility.howItWorks
             );
 
+    local data = Mod.PublicGameData or {};
+    local economy = data.globalEconomy or {};
+    local ourNation =
+        game ~= nil
+        and game.Us ~= nil
+        and (economy.nations or {})[game.Us.ID]
+        or nil;
+
+    local warEventAlertsBox =
+        UI.CreateCheckBox(area)
+            .SetText(
+                "Show War Event Pop-up Alerts"
+            )
+            .SetIsChecked(
+                ourNation == nil
+                or ourNation.showWarEventAlerts ~= false
+            );
+
+    UI.CreateLabel(area)
+        .SetText(
+            "Turning off War Event pop-ups only hides alerts. Wartime choices and consequences remain active and can always be reviewed in Diplomacy."
+        );
+
     UI.CreateButton(area)
         .SetText(
             "APPLY TAB CHANGES"
@@ -3663,6 +4049,17 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.howItWorks =
                 helpBox.GetIsChecked();
 
+            game.SendGameCustomMessage(
+                "Updating war event alert preference...",
+                {
+                    type = "setWarEventAlerts",
+                    enabled = warEventAlertsBox.GetIsChecked()
+                },
+                function(result)
+                    -- Preference is stored server-side so it persists for this game.
+                end
+            );
+
             BuildMainTabs(
                 tabsHost,
                 parent,
@@ -3688,6 +4085,15 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.unitedNations = true;
             PlayerTabVisibility.globalEconomy = true;
             PlayerTabVisibility.howItWorks = true;
+
+            game.SendGameCustomMessage(
+                "Restoring war event alerts...",
+                {
+                    type = "setWarEventAlerts",
+                    enabled = true
+                },
+                function(result) end
+            );
 
             BuildMainTabs(
                 tabsHost,
@@ -3763,7 +4169,7 @@ function ShowResourcesMenu(parent, game)
     );
 
     UI.CreateLabel(area).SetText(
-        "Map display: every resource type uses the SAME Resource Hub icon. The number beside it is the combined facility level on that territory. Resource Hub map icons are globally controlled by the host; hiding this Resources tab does not remove native map structures."
+        "Map display: each territory shows ONE resource icon based on its dominant resource. The number badge on that icon is the combined facility/deposit level on the territory. Resource icons are globally controlled by the host; hiding this Resources tab does not disable the resource system."
     );
 
     local shortages = nation.resourceShortages or {};
@@ -3780,7 +4186,7 @@ function ShowResourcesMenu(parent, game)
     UI.CreateLabel(area).SetText("----------------------------------------");
     UI.CreateLabel(area).SetText("DEVELOP RESOURCE FACILITY");
     UI.CreateLabel(area).SetText(
-        "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn. Each resource territory shows ONE Resource Hub icon; the number beside it is the total facility/deposit level on that territory."
+        "Choose a resource, then click SELECT TERRITORY. Existing deposits can be upgraded; a new facility may also be established on an owned territory at a higher cost. The change is applied next turn. The territory keeps ONE resource icon; its dominant resource controls the icon design and the badge shows total facility/deposit level."
     );
 
     local selectedResource = "Oil";
@@ -11532,201 +11938,149 @@ function ShowHowItWorks(parent)
             parent
         );
 
+    local function Section(title, text)
+        UI.CreateLabel(area)
+            .SetText(
+                "----------------------------------------"
+            );
+        UI.CreateLabel(area)
+            .SetText(
+                title .. "\n\n" .. text
+            );
+    end
 
     UI.CreateLabel(area)
         .SetText(
-            "HOW IT WORKS"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "TRADE AGREEMENTS\n\n" ..
-
-            "Trade Agreements are bilateral economic relationships between two active nations.\n\n" ..
-
-            "Each nation receives a recurring Commerce bonus based on the current Commerce income of its partner.\n\n" ..
-
-            "Trade benefit rate: " ..
-            tostring(
-                ClientTradeBonusPercent()
-            ) ..
-            "% of your partner's Commerce income.\n\n" ..
-
-            "Maximum agreements per nation: " ..
-            tostring(
-                ClientMaxAgreements()
-            ) ..
-            ".\n\n" ..
-
-            "Rejection/cancellation cooldown: " ..
-            tostring(
-                ClientTradeCooldownTurns()
-            ) ..
-            " turn(s).\n\n" ..
-
-            "Trade income changes dynamically as your partner's Commerce economy changes."
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "SMARTER AI TRADE BEHAVIOR\n\n" ..
-
-            "AI nations evaluate the economic strength of potential partners.\n\n" ..
-
-            "AI nations remember the income direction of active trade partners.\n\n" ..
-
-            "A single weak turn does not cause panic. Repeated economic decline builds concern.\n\n" ..
-
-            "The host controls how many consecutive declining turns are required before AI concern begins.\n\n" ..
-
-            "AI nations also respect a minimum agreement duration before replacing established partners.\n\n" ..
-
-            "Replacement requires a substantially stronger alternative, helping prevent constant partner cycling."
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "INVESTMENTS\n\n" ..
-
-            "Creators choose their project funding goal and must contribute at least 20%.\n\n" ..
-
-            "Each outside investor may invest up to 25% of the project's funding goal.\n\n" ..
-
-            "Once full funding is reached, the project enters development for its listed duration.\n\n" ..
-
-            "Successful projects return principal plus profit.\n\n" ..
-
-            "Failed projects return only their listed recovery percentage.\n\n" ..
-
-            "Projects that fail to reach their funding goal before the deadline expire and refund principal.\n\n" ..
-
-            "AI nations may create projects and invest in other projects when enabled by the host."
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "PERMANENT PROJECT ARCHIVE\n\n" ..
-
-            "Completed, failed, and expired projects are removed from the active market but remain stored in the Archive.\n\n" ..
-
-            "The archive records the creator, funding, investors, contribution amounts, payouts, turns, result, and resolution roll."
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "STRATEGIC RESOURCES\n\n" ..
-
-            "Resources are produced by territories you control. Capturing a resource territory transfers its production to the new owner automatically.\n\n" ..
-
-            "Resources are not stockpiled. Each turn, production is calculated, active resource trades are applied, and then shortages are checked.\n\n" ..
-
-            "Existing armies are NEVER removed because of a shortage. Resource shortages affect your future economic and military mobilization capacity instead.\n\n" ..
-
-            "Commerce Example: If your nation earns 400 Commerce and resource shortages create a 10% penalty, the resource system removes 40 Commerce that turn.\n\n" ..
-
-            "Military Readiness is a national indicator from 50% to 100%. Oil, Food, Iron, Gas, Rare Earths, and Lithium can lower readiness. Existing armies are NEVER removed. Instead, lower readiness creates a Mobilization Burden that reduces the Commerce left available for FUTURE army purchases and deployments.\n\n" ..
-
-            "Military Example: If you have 80% Readiness, your readiness gap is 20%. The mod converts part of that gap into a mobilization burden. Your armies already on the map stay untouched, but less Commerce remains available to purchase new armies next turn.\n\n" ..
-
-            "RESOURCE ROLES\n" ..
-            "Oil - major military mobilization support.\n" ..
-            "Gas - economy and military support.\n" ..
-            "Food - population, army sustainment, and stability.\n" ..
-            "Iron - military and industrial production.\n" ..
-            "Uranium - strategic / advanced military resource.\n" ..
-            "Rare Earths - advanced technology and military systems.\n" ..
-            "Coal - industrial Commerce.\n" ..
-            "Copper - infrastructure and industry.\n" ..
-            "Lithium - advanced industry and technology.\n\n" ..
-
-            "RESOURCE HUB ICON\n" ..
-            "A resource territory shows one Resource Hub structure icon. The number beside the icon is the TOTAL facility/deposit level on that territory.\n\n" ..
-
-            "Example: A Resource Hub showing 4 could contain Oil level 2, Iron level 1, and Food level 1. The map stays clean while the Resources menu keeps the full breakdown.\n\n" ..
-
-            "RESOURCE TRADE EXAMPLE\n" ..
-            "If France produces extra Oil but lacks Food, it can sell Oil to another nation for gold and buy Food from a different partner. Contracts move current-turn production every turn while active."
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
-
-
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
+            "HOW IT WORKS - GLOBAL AFFAIRS"
         );
 
     UI.CreateLabel(area)
         .SetText(
-            "UNITED NATIONS / SECURITY COUNCIL\n\n" ..
-
-            "When enabled by the host, the Security Council contains permanent members and rotating members. The default is 5 permanent + 10 rotating seats, but the host can adjust both counts.\n\n" ..
-
-            "Permanent members have veto power. A permanent member voting NO on a Security Council resolution vetoes it even if the normal YES-vote threshold was reached.\n\n" ..
-
-            "The host may pre-assign the first five permanent seats by player slot, or leave those values at 0 for automatic selection based on national economic/military power. Rotating seats refresh every 5 turns.\n\n" ..
-
-            "SANCTIONS: passed sanctions reduce the target nation's Commerce for 3 turns.\n" ..
-            "EMBARGO: blocks Trade Agreement income and Resource Trade deliveries involving the target for 3 turns.\n" ..
-            "AID: gives the target nation an immediate economic aid payment.\n" ..
-            "CONDEMNATION: creates a diplomatic penalty and can increase unrest.\n" ..
-            "CEASEFIRE: if the proposer and target are at war, a passed resolution forces peace between them.\n\n" ..
-
-            "Example: France proposes sanctions on Nation B. Security Council members vote over the configured voting period. If enough members vote YES and no permanent member vetoes it, Nation B receives the sanctions penalty."
+            "This guide explains what each major system does, why it matters, and gives examples. You do not need to master every system on Turn 1. Start with Commerce, Diplomacy, and Trade; then use Markets, Resources, the UN, and AI Manager as your nation develops."
         );
 
+    Section(
+        "QUICK START",
+        "1. Complete National Setup: choose ideology, economic strategy, tax policy, flagship company, and company strategy.\n\n" ..
+        "2. Commerce is your main economic power. In Commerce games it is also the gold used to buy armies, so economic decisions affect military expansion.\n\n" ..
+        "3. Open Diplomacy to see relationships, Current Wars, alliances, NAPs, and any wartime decision waiting for you.\n\n" ..
+        "4. Use Trade Agreements and Investments to grow your economy.\n\n" ..
+        "5. Resources support Commerce and military mobilization. Existing armies are never deleted by shortages.\n\n" ..
+        "6. Security Council members can propose and vote on UN resolutions when the UN is enabled."
+    );
 
-    UI.CreateLabel(area)
-        .SetText(
-            "----------------------------------------"
-        );
+    Section(
+        "COMMERCE",
+        "Commerce represents usable national economic power. It funds investments, markets, resource development, and army purchases in Commerce games.\n\n" ..
+        "Example: If your normal Commerce income is 500 and a resource shortage applies a 10% economic penalty, the resource system removes 50 Commerce for that turn."
+    );
 
+    Section(
+        "TRADE AGREEMENTS",
+        "Trade Agreements are bilateral economic relationships. Each nation receives recurring Commerce based on its partner's current Commerce income.\n\n" ..
+        "Current trade benefit rate: " .. tostring(ClientTradeBonusPercent()) .. "% of your partner's Commerce income.\n" ..
+        "Maximum agreements per nation: " .. tostring(ClientMaxAgreements()) .. ".\n" ..
+        "Rejection/cancellation cooldown: " .. tostring(ClientTradeCooldownTurns()) .. " turn(s).\n\n" ..
+        "Example: If Nation A has 2,000 Commerce and the rate is 10%, its partner receives a trade benefit based on 200 Commerce. If the partner has 600 Commerce, Nation A receives a benefit based on 60 Commerce."
+    );
 
-    UI.CreateLabel(area)
-        .SetText(
-            "HOST CONFIGURATION\n\n" ..
+    Section(
+        "INVESTMENTS",
+        "Project creators choose a funding goal and contribute at least 20%. Outside investors may contribute up to 25% of the goal. Fully funded projects enter development and later succeed or fail.\n\n" ..
+        "Successful projects return principal plus profit. Failed projects return only the listed recovery percentage. Unfunded projects expire and refund committed principal.\n\n" ..
+        "Completed, failed, and expired projects remain in the permanent archive so players can review the creator, investors, payouts, result, and resolution roll."
+    );
 
-            "Hosts can configure the maximum number of trade agreements from 1 to 20, trade bonus percentage, cooldown duration, AI proposal frequency, minimum AI agreement duration, AI replacement threshold, economic decline sensitivity, AI investment behavior, and AI treasury reserve."
-        );
+    Section(
+        "MARKETS & FLAGSHIP COMPANIES",
+        "Public companies have a stock price, shares, strategy, dividends, and ownership. Buying shares gives you exposure to that company's value and possible dividends.\n\n" ..
+        "Growth companies generally retain more value for expansion, Balanced companies split priorities, and Dividend companies return more income to shareholders.\n\n" ..
+        "Founder shares begin with a 0 gold cost basis because they represent original ownership, not a market purchase. Stock splits increase share count while adjusting price so ownership value is not reset."
+    );
+
+    Section(
+        "TAXATION & IDEOLOGY",
+        "Tax policy changes government Commerce but also affects markets, investments, and confidence. Ideology adds a second national modifier and influences AI economic behavior.\n\n" ..
+        "Available ideologies include Free Market, Capitalist, Social Democratic, State Capitalist, Socialist, Communist, Fascist, and Nationalist. These are gameplay economic categories, not a claim that every real-world government fits perfectly into one label.\n\n" ..
+        "Example: a higher-tax nation may gain more immediate Commerce while accepting weaker market and investment conditions."
+    );
+
+    Section(
+        "AI MANAGER",
+        "Human players may enable the AI Manager when the host allows it. The player gives it a per-turn budget. It can manage stocks and investments but cannot change your ideology, tax policy, diplomacy, trade agreements, or military orders.\n\n" ..
+        "Cancellation has a one-turn delay so players cannot toggle automation on and off during the same economic cycle to exploit timing."
+    );
+
+    Section(
+        "DIPLOMACY & CURRENT WARS",
+        "Official Peace / War relationships determine when nations may attack each other. Diplomacy also supports NAPs, alliances, factions, peace offers, and delayed war declarations.\n\n" ..
+        "The Current Wars section shows each active war's start turn, duration, attacks, combat losses, captured territories, and direct wartime decision costs.\n\n" ..
+        "Combat losses are recorded from actual Attack/Transfer results. The economic-impact line only counts direct costs created by this mod's wartime decision system; it does not pretend to measure every indirect economic consequence of war."
+    );
+
+    Section(
+        "WAR EVENTS",
+        "When enabled by the host, human nations at war periodically receive a strategic decision. Players may hide the pop-up alert in Customize Tabs, but the decision itself remains active in Diplomacy.\n\n" ..
+        "FULL MOBILIZATION: costs about 8% of current Commerce, minimum 25 gold; +10 Military Readiness for 2 turns; +2 Unrest.\n\n" ..
+        "RATION SUPPLIES: costs about 3% of current Commerce, minimum 10 gold; +5 Military Readiness for 2 turns; +5 Unrest.\n\n" ..
+        "PROTECT ECONOMY: no direct gold cost; -8 Military Readiness for 2 turns; -2 Unrest.\n\n" ..
+        "Example: a nation with 1,000 Commerce choosing Full Mobilization pays 80 gold on the next economy turn and receives the temporary readiness boost. Existing armies are not changed."
+    );
+
+    Section(
+        "STRATEGIC RESOURCES",
+        "Resources are produced by territories you control. Capturing a resource territory transfers its production to the new owner automatically. Resources are not stockpiled: each turn production is calculated, resource trades are applied, and shortages are checked.\n\n" ..
+        "Existing armies are NEVER removed because of a shortage. Shortages affect future economic output and military mobilization instead.\n\n" ..
+        "Oil: major military mobilization support.\n" ..
+        "Gas: economy and military support.\n" ..
+        "Food: population, army sustainment, and stability.\n" ..
+        "Iron: military and industrial production.\n" ..
+        "Uranium: strategic / advanced military resource.\n" ..
+        "Rare Earths: advanced technology and military systems.\n" ..
+        "Coal: industrial Commerce.\n" ..
+        "Copper: infrastructure and industry.\n" ..
+        "Lithium: advanced industry and technology.\n\n" ..
+        "Military Readiness ranges from 50% to 100%. A shortage can lower Readiness, which creates a Mobilization Burden and leaves less Commerce available for future army purchases.\n\n" ..
+        "Example: If resource shortages create 80% Readiness, your current armies stay untouched. The readiness gap reduces future mobilization efficiency until you improve production, capture resources, or trade for what you lack."
+    );
+
+    Section(
+        "RESOURCE MAP ICONS",
+        "Each resource territory displays ONE resource icon, not a pile of icons. The dominant resource on that territory controls the icon design. The numeric badge built into the icon shows the combined facility/deposit level across every resource on that territory.\n\n" ..
+        "Example: a territory containing Oil level 2, Iron level 1, and Food level 1 displays one Oil-style resource icon with a badge of 4. The Resources menu shows the full breakdown.\n\n" ..
+        "Resource icon families are visually different for Oil, Gas, Uranium, Iron, Food, Rare Earths, Coal, Copper, and Lithium. The host can disable resource map icons globally without disabling resource production or effects."
+    );
+
+    Section(
+        "RESOURCE TRADE",
+        "Resource contracts transfer current-turn production every turn while active. The seller chooses a resource, quantity, gold price per unit, and partner. Because there is no stockpile, a seller cannot deliver more than current production.\n\n" ..
+        "Example: France produces extra Oil but lacks Food. France can sell Oil for gold and buy Food from another nation. A UN embargo can temporarily pause deliveries without deleting the underlying contract."
+    );
+
+    Section(
+        "UNITED NATIONS / SECURITY COUNCIL",
+        "When enabled, the Security Council contains permanent and rotating members. The default is 5 permanent + 10 rotating seats, but the host can change both counts. Permanent members have veto power.\n\n" ..
+        "Each player has a host-configurable proposal cooldown, preventing resolution spam. The UN page shows your remaining cooldown live. AI council members vote automatically.\n\n" ..
+        "SANCTIONS: target loses 10% Commerce each turn for 3 turns.\n" ..
+        "EMBARGO: pauses Trade Agreement income and Resource Trade deliveries involving the target for 3 turns.\n" ..
+        "AID: target receives 10% of its Commerce income immediately, minimum 50 gold.\n" ..
+        "CONDEMNATION: formal condemnation for 3 turns and +5 Unrest when unrest is active.\n" ..
+        "CEASEFIRE: forces peace between proposer and target if they are currently at war.\n\n" ..
+        "Example: France proposes Sanctions against Nation B. Council members vote. If the configured YES threshold is reached and no permanent member votes NO, Nation B receives the 10% Commerce penalty for 3 turns."
+    );
+
+    Section(
+        "ICON GUIDE",
+        "CITY ICON + NUMBER: native Commerce city count.\n\n" ..
+        "RESOURCE ICON + BADGE: dominant strategic resource plus total facility/deposit level on that territory.\n\n" ..
+        "Different resource colors/labels identify Oil, Gas, Uranium, Iron, Food, Rare Earths, Coal, Copper, and Lithium.\n\n" ..
+        "Hiding a menu tab does not disable its system. Host configuration controls whether major systems such as Resources, UN, AI Manager, and War Events are actually enabled."
+    );
+
+    Section(
+        "HOST CONFIGURATION",
+        "The host can enable or disable major systems and tune their pacing. Important controls include Trade Agreement limits and bonus rate, taxation, Smart AI behavior, AI Manager availability, Strategic Resources, resource-map icons, resource trading, UN activation, council size, UN proposal cooldown, voting duration, and War Event frequency."
+    );
 end
 
 

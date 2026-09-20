@@ -107,6 +107,16 @@ function Client_SaveConfigureUI(
             "PeaceCooldownTurns"
         );
 
+    local warEventsEnabled =
+        ReadBool(
+            "WarEventsEnabled"
+        );
+
+    local warEventFrequencyTurns =
+        ReadNumber(
+            "WarEventFrequencyTurns"
+        );
+
     local nonAggressionPactsEnabled =
         ReadBool(
             "NonAggressionPactsEnabled"
@@ -508,6 +518,17 @@ function Client_SaveConfigureUI(
         0,
         10,
         "Peace Cooldown must be between 0 and 10 turns."
+    ) then
+        return;
+    end
+
+
+    if not ValidateRange(
+        alert,
+        warEventFrequencyTurns,
+        1,
+        10,
+        "War Event Frequency must be between 1 and 10 turns."
     ) then
         return;
     end
@@ -975,6 +996,12 @@ function Client_SaveConfigureUI(
 
     Mod.Settings.PeaceCooldownTurns =
         peaceCooldownTurns;
+
+    Mod.Settings.WarEventsEnabled =
+        warEventsEnabled;
+
+    Mod.Settings.WarEventFrequencyTurns =
+        warEventFrequencyTurns;
 
     Mod.Settings.NonAggressionPactsEnabled =
         nonAggressionPactsEnabled;

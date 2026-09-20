@@ -67,6 +67,69 @@ local pendingFactionInvites =
 local ourID =
     game.Us.ID;
 
+-- =========================================================
+-- INTERACTIVE WAR EVENT NOTIFICATION
+-- =========================================================
+
+local ourNation =
+    (notificationEconomy.nations or {})[
+        ourID
+    ];
+
+local pendingWarEvent =
+    ourNation ~= nil
+    and ourNation.pendingWarEvent
+    or nil;
+
+if pendingWarEvent ~= nil
+    and ourNation.showWarEventAlerts ~= false
+then
+
+    local notificationKey =
+        "warEvent:" ..
+        tostring(
+            pendingWarEvent.id
+            or 0
+        );
+
+    if not DiplomacyNotificationsShown[
+        notificationKey
+    ] then
+
+        DiplomacyNotificationsShown[
+            notificationKey
+        ] = true;
+
+        local otherName =
+            "another nation";
+
+        if pendingWarEvent.otherPlayerID ~= nil then
+            local otherPlayer =
+                game.Game.Players[
+                    pendingWarEvent.otherPlayerID
+                ];
+            if otherPlayer ~= nil then
+                otherName =
+                    otherPlayer.DisplayName(
+                        nil,
+                        false
+                    );
+            end
+        end
+
+        UI.Alert(
+            tostring(
+                pendingWarEvent.title
+                or "WARTIME DECISION"
+            ) ..
+            "\n\nYour war with " ..
+            tostring(otherName) ..
+            " requires a national decision.\n\nOpen Diplomacy and use the Current Wars / War Event section to choose your response."
+        );
+
+    end
+end
+
 
 for _, declaration in pairs(
     pendingWarDeclarations
