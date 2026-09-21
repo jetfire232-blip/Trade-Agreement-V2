@@ -984,136 +984,296 @@ end
             "CURRENT WARS"
         );
 
-    -- Coalition/faction view: a conflict can contain several nations on each
-    -- side while the underlying pairwise relationships still enforce attacks.
+    -- Current Wars is conflict-first rather than pair-first.  A coalition war
+    -- is rendered once with every participant, its original cause, aggregate
+    -- statistics, and any Join War actions available to the viewing nation.
     local conflicts = diplomacy.warConflicts or {};
-    local ourFactionID = (diplomacy.playerFaction or {})[ourID];
-    local ourFaction = ourFactionID and (diplomacy.factions or {})[ourFactionID] or nil;
+    local ourFactionIDForWars = (diplomacy.playerFaction or {})[ourID];
+    local ourFactionForWars = ourFactionIDForWars and (diplomacy.factions or {})[ourFactionIDForWars] or nil;
+    local warStats = diplomacy.warStats or {};
+    local currentTurn = data.tradeTurn or economy.currentEconomyTurn or 0;
+    local activeWarCount = 0;
+    local renderedRelationshipKeys = {};
+
+    local function CurrentWarsPairKey(player1, player2)
+        local a = tostring(player1);
+        local b = tostring(player2);
+        if a < b then
+            return a .. "|" .. b;
+        end
+        return b .. "|" .. a;
+    end
+
+    local function SortedWarParticipantIDs(side)
+        local ids = {};
+        for participantID, participating in pairs(side or {}) do
+            if participating == true then
+                table.insert(ids, participantID);
+            end
+        end
+        table.sort(ids, function(a, b)
+            return tostring(GetPlayerName(game, a)) < tostring(GetPlayerName(game, b));
+        end);
+        return ids;
+    end
+
+    local function WarParticipantNames(ids)
+        local names = {};
+        for _, participantID in ipairs(ids or {}) do
+            table.insert(names, GetPlayerName(game, participantID));
+        end
+        return table.concat(names, ", ");
+    end
+
+    local function IsOurActiveAlly(participantID)
+        local alliance = (alliances or {})[CurrentWarsPairKey(ourID, participantID)];
+        return alliance ~= nil and alliance.active == true;
+    end
+
+    local function IsOurFactionMate(participantID)
+        if ourFactionForWars == nil then return false; end
+        return (ourFactionForWars.members or {})[participantID] == true;
+    end
+
+    local function HasWarAgainstSide(side)
+        for participantID, participating in pairs(side or {}) do
+            if participating == true then
+                local rel = relationships[CurrentWarsPairKey(ourID, participantID)];
+                if rel ~= nil and rel.status == "war" then
+                    return true;
+                end
+            end
+        end
+        return false;
+    end
+
+    local function HasAllianceWithSide(side)
+        for participantID, participating in pairs(side or {}) do
+            if participating == true and IsOurActiveAlly(participantID) then
+                return true;
+            end
+        end
+        return false;
+    end
+
+    local function CanJoinWarSide(side, opposingSide)
+        if (side or {})[ourID] == true or (opposingSide or {})[ourID] == true then
+            return false;
+        end
+        if HasWarAgainstSide(side) or HasAllianceWithSide(opposingSide) then
+            return false;
+        end
+        for participantID, participating in pairs(side or {}) do
+            if participating == true
+                and participantID ~= ourID
+                and (IsOurFactionMate(participantID) or IsOurActiveAlly(participantID))
+            then
+                return true;
+            end
+        end
+        return false;
+    end
+
+    local function AddAmount(target, playerID, amount)
+        local key = tostring(playerID);
+        target[key] = (target[key] or 0) + math.max(0, math.floor(tonumber(amount) or 0));
+    end
+
+    local function ParticipantTotalsText(ids, totals, unit)
+        local parts = {};
+        local suffix = unit and (" " .. tostring(unit)) or "";
+        for _, participantID in ipairs(ids or {}) do
+            table.insert(
+                parts,
+                GetPlayerName(game, participantID) .. " " .. tostring(totals[tostring(participantID)] or 0) .. suffix
+            );
+        end
+        return table.concat(parts, " | ");
+    end
+
+    local conflictIDs = {};
     for conflictID, conflict in pairs(conflicts) do
         if conflict ~= nil and conflict.active ~= false then
-            local sideA = conflict.sideA or {};
-            local sideB = conflict.sideB or {};
-            local namesA = {};
-            local namesB = {};
-            for pid, _ in pairs(sideA) do table.insert(namesA, GetPlayerName(game, pid)); end
-            for pid, _ in pairs(sideB) do table.insert(namesB, GetPlayerName(game, pid)); end
-            table.sort(namesA); table.sort(namesB);
-            if #namesA > 0 and #namesB > 0 then
-                UI.CreateLabel(area).SetText(table.concat(namesA, ", ") .. " VS " .. table.concat(namesB, ", "));
-                UI.CreateLabel(area).SetText("Cause: " .. tostring(conflict.cause or "Territorial Dispute") .. " | Conflict #" .. tostring(conflictID));
+            table.insert(conflictIDs, conflictID);
+        end
+    end
+    table.sort(conflictIDs, function(a, b)
+        return (tonumber(a) or 0) < (tonumber(b) or 0);
+    end);
 
-                local alreadyIn = sideA[ourID] == true or sideB[ourID] == true;
-                if not alreadyIn and ourFaction ~= nil then
-                    local canJoinA = false; local canJoinB = false;
-                    for memberID, _ in pairs(ourFaction.members or {}) do
-                        if sideA[memberID] then canJoinA = true; end
-                        if sideB[memberID] then canJoinB = true; end
-                    end
-                    if canJoinA then
-                        UI.CreateButton(area).SetText("JOIN WAR - SIDE A").SetOnClick(function()
-                            game.SendGameCustomMessage("Joining faction war...", {type="joinWar", conflictID=conflictID, side="A"}, function(result)
-                                if result and result.message then UI.Alert(result.message); end
-                                ShowDiplomacyMenu(parent, game);
-                            end);
-                        end);
-                    elseif canJoinB then
-                        UI.CreateButton(area).SetText("JOIN WAR - SIDE B").SetOnClick(function()
-                            game.SendGameCustomMessage("Joining faction war...", {type="joinWar", conflictID=conflictID, side="B"}, function(result)
-                                if result and result.message then UI.Alert(result.message); end
-                                ShowDiplomacyMenu(parent, game);
-                            end);
-                        end);
+    for _, conflictID in ipairs(conflictIDs) do
+        local conflict = conflicts[conflictID];
+        local sideA = conflict.sideA or {};
+        local sideB = conflict.sideB or {};
+        local sideAIDs = SortedWarParticipantIDs(sideA);
+        local sideBIDs = SortedWarParticipantIDs(sideB);
+
+        if #sideAIDs > 0 and #sideBIDs > 0 then
+            activeWarCount = activeWarCount + 1;
+
+            local totalAttacks = 0;
+            local totalCasualties = {};
+            local totalCaptures = {};
+            local totalEconomicImpact = {};
+            local earliestStartTurn = conflict.startTurn or currentTurn;
+
+            for _, playerA in ipairs(sideAIDs) do
+                for _, playerB in ipairs(sideBIDs) do
+                    local relationshipKey = CurrentWarsPairKey(playerA, playerB);
+                    local relationship = relationships[relationshipKey];
+                    if relationship ~= nil and relationship.status == "war" then
+                        renderedRelationshipKeys[relationshipKey] = true;
+                        local stats = warStats[relationshipKey] or {};
+                        totalAttacks = totalAttacks + math.max(0, math.floor(tonumber(stats.attacks) or 0));
+                        earliestStartTurn = math.min(
+                            earliestStartTurn,
+                            tonumber(stats.startTurn or relationship.sinceTurn or earliestStartTurn) or earliestStartTurn
+                        );
+                        for participantKey, amount in pairs(stats.casualties or {}) do
+                            AddAmount(totalCasualties, participantKey, amount);
+                        end
+                        for participantKey, amount in pairs(stats.territoriesCaptured or {}) do
+                            AddAmount(totalCaptures, participantKey, amount);
+                        end
+                        for participantKey, amount in pairs(stats.economicImpact or {}) do
+                            AddAmount(totalEconomicImpact, participantKey, amount);
+                        end
                     end
                 end
-                UI.CreateLabel(area).SetText("----------------------------------------");
             end
+
+            local duration = math.max(1, currentTurn - earliestStartTurn + 1);
+            local allParticipantIDs = {};
+            for _, participantID in ipairs(sideAIDs) do table.insert(allParticipantIDs, participantID); end
+            for _, participantID in ipairs(sideBIDs) do table.insert(allParticipantIDs, participantID); end
+
+            UI.CreateLabel(area)
+                .SetText(
+                    WarParticipantNames(sideAIDs) .. " VS " .. WarParticipantNames(sideBIDs)
+                );
+
+            -- Keep the cause directly underneath the fight it belongs to.
+            UI.CreateLabel(area)
+                .SetText(
+                    "Cause: " .. tostring(conflict.cause or "Territorial Dispute")
+                    .. " | Conflict #" .. tostring(conflictID)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Started Turn " .. tostring(earliestStartTurn)
+                    .. " | Duration: " .. tostring(duration) .. " turn(s)"
+                    .. " | Attacks: " .. tostring(totalAttacks)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Combat losses: " .. ParticipantTotalsText(allParticipantIDs, totalCasualties)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Territories captured: " .. ParticipantTotalsText(allParticipantIDs, totalCaptures)
+                );
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "Direct wartime decision cost: " .. ParticipantTotalsText(allParticipantIDs, totalEconomicImpact, "gold")
+                );
+
+            local joinConflictID = conflictID;
+            local alreadyInConflict = sideA[ourID] == true or sideB[ourID] == true;
+            if not alreadyInConflict then
+                local canJoinA = CanJoinWarSide(sideA, sideB);
+                local canJoinB = CanJoinWarSide(sideB, sideA);
+
+                if canJoinA or canJoinB then
+                    UI.CreateLabel(area)
+                        .SetText(
+                            "JOIN WAR: Support an allied or faction nation already fighting in this conflict."
+                        );
+                else
+                    UI.CreateLabel(area)
+                        .SetText(
+                            "Join War unavailable: you need an active Alliance or Faction connection to a nation on the side you want to support."
+                        );
+                end
+
+                if canJoinA then
+                    UI.CreateButton(area)
+                        .SetText("JOIN " .. WarParticipantNames(sideAIDs))
+                        .SetOnClick(function()
+                            game.SendGameCustomMessage(
+                                "Joining war...",
+                                {type="joinWar", conflictID=joinConflictID, side="A"},
+                                function(result)
+                                    if result and result.message then UI.Alert(result.message); end
+                                    ShowDiplomacyMenu(parent, game);
+                                end
+                            );
+                        end);
+                end
+
+                if canJoinB then
+                    UI.CreateButton(area)
+                        .SetText("JOIN " .. WarParticipantNames(sideBIDs))
+                        .SetOnClick(function()
+                            game.SendGameCustomMessage(
+                                "Joining war...",
+                                {type="joinWar", conflictID=joinConflictID, side="B"},
+                                function(result)
+                                    if result and result.message then UI.Alert(result.message); end
+                                    ShowDiplomacyMenu(parent, game);
+                                end
+                            );
+                        end);
+                end
+            end
+
+            UI.CreateLabel(area)
+                .SetText(
+                    "----------------------------------------"
+                );
         end
     end
 
-    local warStats =
-        diplomacy.warStats
-        or {};
-
-    local currentTurn =
-        data.tradeTurn
-        or economy.currentEconomyTurn
-        or 0;
-
-    local activeWarCount = 0;
-
-    for relationshipKey, relationship
-        in pairs(
-            relationships
-        )
-    do
-
+    -- Backward-compatibility fallback: older saves or wars created before
+    -- coalition tracking may only have pairwise relationship data.  Render
+    -- those once, but skip pairs already represented by a conflict card.
+    for relationshipKey, relationship in pairs(relationships) do
         if relationship ~= nil
             and relationship.status == "war"
             and relationship.player1 ~= nil
             and relationship.player2 ~= nil
+            and renderedRelationshipKeys[tostring(relationshipKey)] ~= true
         then
-
-            activeWarCount =
-                activeWarCount
-                + 1;
+            activeWarCount = activeWarCount + 1;
 
             local player1 = relationship.player1;
             local player2 = relationship.player2;
             local key = tostring(relationshipKey);
             local stats = warStats[key] or {};
+            local startTurn = stats.startTurn or relationship.sinceTurn or currentTurn;
+            local duration = math.max(1, currentTurn - startTurn + 1);
+            local casualties = stats.casualties or {};
+            local captures = stats.territoriesCaptured or {};
+            local economicImpact = stats.economicImpact or {};
 
-            local startTurn =
-                stats.startTurn
-                or relationship.sinceTurn
-                or currentTurn;
-
-            local duration =
-                math.max(
-                    1,
-                    currentTurn
-                    - startTurn
-                    + 1
-                );
-
-            local row =
-                UI.CreateHorizontalLayoutGroup(
-                    area
-                );
-
+            local row = UI.CreateHorizontalLayoutGroup(area);
             UI.CreateLabel(row)
-                .SetText(
-                    GetPlayerName(game, player1)
-                )
-                .SetColor(
-                    GetPlayerUIColor(game, player1, "#FFFFFF")
-                )
+                .SetText(GetPlayerName(game, player1))
+                .SetColor(GetPlayerUIColor(game, player1, "#FFFFFF"))
+                .SetFlexibleWidth(1);
+            UI.CreateLabel(row).SetText("vs");
+            UI.CreateLabel(row)
+                .SetText(GetPlayerName(game, player2))
+                .SetColor(GetPlayerUIColor(game, player2, "#FFFFFF"))
                 .SetFlexibleWidth(1);
 
-            UI.CreateLabel(row)
+            UI.CreateLabel(area)
                 .SetText(
-                    "vs"
+                    "Cause: " .. tostring(stats.reason or relationship.warReason or "Territorial Dispute")
                 );
-
-            UI.CreateLabel(row)
-                .SetText(
-                    GetPlayerName(game, player2)
-                )
-                .SetColor(
-                    GetPlayerUIColor(game, player2, "#FFFFFF")
-                )
-                .SetFlexibleWidth(1);
-
-            local casualties =
-                stats.casualties
-                or {};
-
-            local captures =
-                stats.territoriesCaptured
-                or {};
-
-            local economicImpact =
-                stats.economicImpact
-                or {};
 
             UI.CreateLabel(area)
                 .SetText(
@@ -1124,44 +1284,32 @@ end
 
             UI.CreateLabel(area)
                 .SetText(
-                    "Cause: " .. tostring(stats.reason or relationship.warReason or "Territorial Dispute")
-                );
-
-            UI.CreateLabel(area)
-                .SetText(
                     "Combat losses: "
-                    .. GetPlayerName(game, player1) .. " "
-                    .. tostring(casualties[tostring(player1)] or 0)
+                    .. GetPlayerName(game, player1) .. " " .. tostring(casualties[tostring(player1)] or 0)
                     .. " | "
-                    .. GetPlayerName(game, player2) .. " "
-                    .. tostring(casualties[tostring(player2)] or 0)
+                    .. GetPlayerName(game, player2) .. " " .. tostring(casualties[tostring(player2)] or 0)
                 );
 
             UI.CreateLabel(area)
                 .SetText(
                     "Territories captured: "
-                    .. GetPlayerName(game, player1) .. " "
-                    .. tostring(captures[tostring(player1)] or 0)
+                    .. GetPlayerName(game, player1) .. " " .. tostring(captures[tostring(player1)] or 0)
                     .. " | "
-                    .. GetPlayerName(game, player2) .. " "
-                    .. tostring(captures[tostring(player2)] or 0)
+                    .. GetPlayerName(game, player2) .. " " .. tostring(captures[tostring(player2)] or 0)
                 );
 
             UI.CreateLabel(area)
                 .SetText(
                     "Direct wartime decision cost: "
-                    .. GetPlayerName(game, player1) .. " "
-                    .. tostring(economicImpact[tostring(player1)] or 0) .. " gold"
+                    .. GetPlayerName(game, player1) .. " " .. tostring(economicImpact[tostring(player1)] or 0) .. " gold"
                     .. " | "
-                    .. GetPlayerName(game, player2) .. " "
-                    .. tostring(economicImpact[tostring(player2)] or 0) .. " gold"
+                    .. GetPlayerName(game, player2) .. " " .. tostring(economicImpact[tostring(player2)] or 0) .. " gold"
                 );
 
             UI.CreateLabel(area)
                 .SetText(
-                    "--------------------"
+                    "----------------------------------------"
                 );
-
         end
     end
 
@@ -4220,6 +4368,8 @@ function ShowResourcesMenu(parent, game)
     UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceRequirements));
     UI.CreateLabel(area).SetText("Effective After Trades");
     UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceEffective));
+    UI.CreateLabel(area).SetText("National Stockpile");
+    UI.CreateLabel(area).SetText(ResourceAmountText(nation.resourceStockpile));
 
     UI.CreateLabel(area).SetText("RESOURCE BALANCE");
     for _, resourceName in ipairs(RESOURCE_UI_TYPES) do
@@ -4231,9 +4381,26 @@ function ShowResourcesMenu(parent, game)
                 need = need + recruiterLevels;
             end
             local balance = have - need;
-            local status = balance < 0 and "SHORTAGE" or (balance > 0 and "SURPLUS" or "STABLE");
+            local stockpile = math.max(0, tonumber((nation.resourceStockpile or {})[resourceName]) or 0);
+            local stockpileChange = tonumber((nation.resourceStockpileChange or {})[resourceName]) or 0;
+            local uncoveredShortage = math.max(0, tonumber((nation.resourceShortages or {})[resourceName]) or 0);
+            local status = "STABLE";
+            if uncoveredShortage > 0 then
+                status = "SHORTAGE";
+            elseif balance < 0 then
+                status = "STOCKPILE COVERED";
+            elseif balance > 0 then
+                status = "SURPLUS";
+            end
             local prefix = balance > 0 and "+" or "";
-            UI.CreateLabel(area).SetText(resourceName .. ": " .. tostring(have) .. "/" .. tostring(need) .. " | " .. prefix .. tostring(balance) .. " " .. status);
+            local stockpilePrefix = stockpileChange > 0 and "+" or "";
+            UI.CreateLabel(area).SetText(
+                resourceName .. ": " .. tostring(have) .. "/" .. tostring(need)
+                .. " | Net " .. prefix .. tostring(balance)
+                .. " | Stockpile " .. tostring(stockpile)
+                .. " (" .. stockpilePrefix .. tostring(stockpileChange) .. ")"
+                .. " | " .. status
+            );
         end
     end
 
@@ -4386,7 +4553,7 @@ function ShowResourcesMenu(parent, game)
     if GetClientSetting("ResourceTradingEnabled", true) == true then
         UI.CreateLabel(area).SetText("----------------------------------------");
         UI.CreateLabel(area).SetText("RESOURCE TRADE CONTRACTS");
-        UI.CreateLabel(area).SetText("Contracts transfer current-turn production every turn; resources are not stockpiled.");
+        UI.CreateLabel(area).SetText("Contracts transfer current-turn production every turn; any remaining national surplus can be added to the stockpile after trade and maintenance are resolved.");
 
         local tradeResource = "Oil";
         local tradeAmount = 1;
@@ -12279,7 +12446,7 @@ function ShowHowItWorks(parent)
     Section(
         "DIPLOMACY & CURRENT WARS",
         "Official Peace / War relationships determine when nations may attack each other. Diplomacy also supports NAPs, alliances, factions, peace offers, and delayed war declarations.\n\n" ..
-        "The Current Wars section shows each active war's start turn, duration, attacks, combat losses, captured territories, and direct wartime decision costs.\n\n" ..
+        "The Current Wars section groups coalition wars into a single conflict, keeps the original war cause directly under that fight, and shows start turn, duration, attacks, combat losses, captured territories, and direct wartime decision costs. Eligible Alliance or Faction partners can join an existing side from the same conflict card.\n\n" ..
         "Combat losses are recorded from actual Attack/Transfer results. The economic-impact line only counts direct costs created by this mod's wartime decision system; it does not pretend to measure every indirect economic consequence of war."
     );
 
@@ -12294,7 +12461,7 @@ function ShowHowItWorks(parent)
 
     Section(
         "STRATEGIC RESOURCES",
-        "Resources are produced by territories you control. Capturing a resource territory transfers its production to the new owner automatically. Resources are not stockpiled: each turn production is calculated, resource trades are applied, and shortages are checked.\n\n" ..
+        "Resources are produced by territories you control. Capturing a resource territory transfers its future production to the new owner automatically. After resource trades and maintenance are applied, any positive surplus is added to that nation's persistent stockpile. A later deficit consumes the stockpile before uncovered shortage penalties apply.\n\n" ..
         "Existing armies are NEVER removed because of a shortage. Shortages affect future economic output and military mobilization instead.\n\n" ..
         "Oil: major military mobilization support.\n" ..
         "Gas: economy and military support.\n" ..
@@ -12318,7 +12485,8 @@ function ShowHowItWorks(parent)
 
     Section(
         "RESOURCE TRADE",
-        "Resource contracts transfer current-turn production every turn while active. The seller chooses a resource, quantity, gold price per unit, and partner. Because there is no stockpile, a seller cannot deliver more than current production.\n\n" ..
+        "Resource contracts transfer current-turn production every turn while active. The seller chooses a resource, quantity, gold price per unit, and partner. Contracts are processed before stockpile changes, so trade deliveries come from current-turn effective production.\n\n" ..
+        "RESOURCE STOCKPILES: Any resource production left after trades and normal requirements is automatically saved in the nation's stockpile. Stockpiles persist between turns. If a later turn has a deficit, the stored resource is consumed first; shortage penalties only apply to the portion that cannot be covered by the stockpile.\n\n" ..
         "Example: France produces extra Oil but lacks Food. France can sell Oil for gold and buy Food from another nation. A UN embargo can temporarily pause deliveries without deleting the underlying contract."
     );
 

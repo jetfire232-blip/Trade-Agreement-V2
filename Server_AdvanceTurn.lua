@@ -14346,6 +14346,8 @@ end
 local function EnsureNationResourceState(nation)
     nation.resourceProduction = nation.resourceProduction or {};
     nation.resourceEffective = nation.resourceEffective or {};
+    nation.resourceStockpile = nation.resourceStockpile or {};
+    nation.resourceStockpileChange = nation.resourceStockpileChange or {};
     nation.resourceShortages = nation.resourceShortages or {};
     nation.resourceRequirements = nation.resourceRequirements or {};
     if nation.resourceRequirementsInitialized == nil then nation.resourceRequirementsInitialized = false; end
@@ -14498,6 +14500,7 @@ local function ProcessStrategicResources(game, data, resourceChanges)
         EnsureNationResourceState(nation);
         nation.resourceProduction = EmptyResourceTable();
         nation.resourceEffective = EmptyResourceTable();
+        nation.resourceStockpileChange = EmptyResourceTable();
         nation.resourceShortages = {};
     end
 
@@ -14532,7 +14535,9 @@ local function ProcessStrategicResources(game, data, resourceChanges)
         end
     end
 
-    -- Recurring resource contracts.  No stockpile: resources are transferred from current turn production.
+    -- Recurring resource contracts transfer current-turn production before
+    -- national stockpiles are updated. Unsold surplus can then be stored,
+    -- while any remaining deficit can be covered from the stockpile.
     local goldRemaining = {};
     for playerID, nation in pairs(economy.nations or {}) do
         goldRemaining[playerID] = math.max(0, GetStoredGold(game, playerID));
@@ -14682,80 +14687,104 @@ local function ProcessStrategicResources(game, data, resourceChanges)
                     ]
                     or 0;
 
-                if have < demand then
+                local stored =
+                    math.max(
+                        0,
+                        tonumber((nation.resourceStockpile or {})[resourceName]) or 0
+                    );
 
-                    local missing =
-                        demand - have;
+                local net = have - demand;
 
-                    nation.resourceShortages[
-                        resourceName
-                    ] =
-                        missing;
+                if net >= 0 then
+
+                    -- Any production left after this turn's requirements is
+                    -- preserved for future turns instead of disappearing.
+                    nation.resourceStockpile[resourceName] = stored + net;
+                    nation.resourceStockpileChange[resourceName] = net;
+
+                else
+
+                    local missing = -net;
+                    local fromStockpile = math.min(stored, missing);
+
+                    nation.resourceStockpile[resourceName] = stored - fromStockpile;
+                    nation.resourceStockpileChange[resourceName] = -fromStockpile;
+
+                    local uncovered = missing - fromStockpile;
+
+                    if uncovered > 0 then
+
+                        nation.resourceShortages[
+                            resourceName
+                        ] =
+                            uncovered;
 
                     -- Every resource has a distinct role.
                     if resourceName == "Oil" then
 
                         readinessPenalty =
                             readinessPenalty
-                            + 15 * missing;
+                            + 15 * uncovered;
 
                     elseif resourceName == "Food" then
 
                         readinessPenalty =
                             readinessPenalty
-                            + 10 * missing;
+                            + 10 * uncovered;
 
                         unrestGain =
                             unrestGain
-                            + 3 * missing;
+                            + 3 * uncovered;
 
                     elseif resourceName == "Iron" then
 
                         readinessPenalty =
                             readinessPenalty
-                            + 12 * missing;
+                            + 12 * uncovered;
 
                     elseif resourceName == "Gas" then
 
                         readinessPenalty =
                             readinessPenalty
-                            + 5 * missing;
+                            + 5 * uncovered;
 
                         commercePenalty =
                             commercePenalty
-                            + basePenalty * missing;
+                            + basePenalty * uncovered;
 
                     elseif resourceName == "Coal" then
 
                         commercePenalty =
                             commercePenalty
-                            + 2 * missing;
+                            + 2 * uncovered;
 
                     elseif resourceName == "Copper" then
 
                         commercePenalty =
                             commercePenalty
-                            + 2 * missing;
+                            + 2 * uncovered;
 
                     elseif resourceName == "Rare Earths" then
 
                         readinessPenalty =
                             readinessPenalty
-                            + 3 * missing;
+                            + 3 * uncovered;
 
                         commercePenalty =
                             commercePenalty
-                            + 1 * missing;
+                            + 1 * uncovered;
 
                     elseif resourceName == "Lithium" then
 
                         readinessPenalty =
                             readinessPenalty
-                            + 2 * missing;
+                            + 2 * uncovered;
 
                         commercePenalty =
                             commercePenalty
-                            + 1 * missing;
+                            + 1 * uncovered;
+
+                    end
 
                     end
 

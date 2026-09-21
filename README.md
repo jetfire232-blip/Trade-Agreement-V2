@@ -29,7 +29,7 @@ Initial resolutions: Sanctions, Embargo, Economic Aid, Condemnation, and Ceasefi
 
 ## Current Wars and War Events
 
-Current Wars tracks war start turn, duration, attacks, combat losses, territories captured, and direct wartime decision costs. Human nations periodically receive strategic wartime choices when enabled by the host. If a choice is ignored for one turn, the mod applies a balanced response automatically.
+Current Wars groups coalition conflicts into one entry, keeps the original cause directly under each fight, and tracks war start turn, duration, attacks, combat losses, territories captured, and direct wartime decision costs. Eligible Alliance or Faction partners can join an active side from the conflict entry. Human nations periodically receive strategic wartime choices when enabled by the host. If a choice is ignored for one turn, the mod applies a balanced response automatically.
 
 ## Performance architecture
 
@@ -48,3 +48,24 @@ The design target is normal-game advances around or below 20 seconds and Mega Ga
 ## Testing
 
 For a release candidate, test a fresh multiplayer game and verify Trade, Investments, Markets, Dividends/ETF, Taxation/Ideology, AI Manager, Resources, UN, Current Wars, War Events, mobile UI, resource captures, eliminated players, and late-game turn performance.
+
+
+## Phase 9 — Markets, Wars & Economic Clarity
+
+- AI independent war declarations now require a shared land border.
+- War declarations record one of six causes. Coalition wars show multiple nations per side, and eligible Alliance or Faction partners can join an active side without creating a duplicate conflict.
+- Global ETF rebalances every 5 turns and pays a visible holder bonus on rebalance turns, separate from normal ETF dividends.
+- Market Overview shows Top 5 gainers and Top 5 downtrend stocks with company confidence and owner unrest.
+- Growth companies favor price appreciation; Dividend companies appreciate more slowly and can raise payout rates when their flagship economy grows.
+- War Bonds let players finance nations currently at war for a 5-turn, 20% target return subject to issuer repayment capacity.
+- AI Manager reports its per-turn budget, actual spend, market/investment breakdown, and before/after Commerce estimate.
+- Strategic Resource maintenance requirements are locked to each nation's starting production profile. Positive net production accumulates in a persistent national stockpile, and later deficits consume that stockpile before uncovered shortages create penalties.
+
+
+## Phase 10 — Army Recruiters & Immediate Construction Payment
+
+- Hosts can enable Army Recruiters and configure base cost, maximum recruiter territories, base armies per level/turn, and maximum level.
+- Players build or upgrade a recruiter on an owned territory from the Resources tab. Commerce is deducted immediately when the order is confirmed.
+- Recruiter output is scaled by Military Readiness and each recruiter level adds +1 Oil, +1 Food and +1 Iron to national maintenance requirements.
+- Recruiters are tied to territory, so capturing the territory transfers the recruiter to the new owner.
+- Strategic Resource facility construction/upgrades also deduct Commerce immediately; prepaid construction is refunded if the territory is lost before resolution.

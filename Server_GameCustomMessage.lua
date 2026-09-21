@@ -5042,7 +5042,7 @@ end
         return;
     end 
     -- =====================================================
-    -- JOIN EXISTING WAR / FACTION COALITION
+    -- JOIN EXISTING WAR / ALLIANCE / FACTION COALITION
     -- =====================================================
 
     if payload.type == "joinWar" then
@@ -5050,6 +5050,8 @@ end
         local side = tostring(payload.side or "");
         local diplomacy = GetDiplomacyData(data);
         diplomacy.warConflicts = diplomacy.warConflicts or {};
+        diplomacy.warStats = diplomacy.warStats or {};
+
         local conflict = conflictID and diplomacy.warConflicts[conflictID] or nil;
         if conflict == nil or conflict.active == false or (side ~= "A" and side ~= "B") then
             setReturn({success=false, message="That war is no longer available to join."});
@@ -5063,49 +5065,154 @@ end
             return;
         end
 
-        local ownFactionID = (diplomacy.playerFaction or {})[playerID];
-        local eligible = false;
-        if ownFactionID ~= nil then
+        local ourSide = side == "A" and conflict.sideA or conflict.sideB;
+        local enemySide = side == "A" and conflict.sideB or conflict.sideA;
+
+        local function IsFactionMate(otherPlayerID)
+            local ownFactionID = (diplomacy.playerFaction or {})[playerID];
+            if ownFactionID == nil then return false; end
             local faction = (diplomacy.factions or {})[ownFactionID];
-            for memberID, _ in pairs((faction and faction.members) or {}) do
-                if (side == "A" and conflict.sideA[memberID]) or (side == "B" and conflict.sideB[memberID]) then
-                    eligible = true;
-                end
+            return faction ~= nil and (faction.members or {})[otherPlayerID] == true;
+        end
+
+        local function IsActiveAlly(otherPlayerID)
+            local alliance = (diplomacy.alliances or {})[PairKey(playerID, otherPlayerID)];
+            return alliance ~= nil and alliance.active == true;
+        end
+
+        -- Joining is a support action, not a free-form declaration.  The
+        -- player must have an Alliance or Faction connection to somebody on
+        -- the side they want to support.
+        local eligible = false;
+        for memberID, participating in pairs(ourSide) do
+            if participating == true
+                and memberID ~= playerID
+                and (IsFactionMate(memberID) or IsActiveAlly(memberID))
+            then
+                eligible = true;
+                break;
             end
         end
+
         if not eligible then
-            setReturn({success=false, message="You may join a side only when one of your Faction members is already fighting on that side."});
+            setReturn({
+                success=false,
+                message="You may join a war only to support an active Alliance or Faction member already fighting on that side."
+            });
             return;
         end
 
-        local ourSide = side == "A" and conflict.sideA or conflict.sideB;
-        local enemySide = side == "A" and conflict.sideB or conflict.sideA;
-        ourSide[playerID] = true;
-        local currentTurn = GetCurrentEconomyTurn(data);
-        for enemyID, _ in pairs(enemySide) do
-            if PlayerAvailable(game, enemyID) then
-                local rel = GetRelationship(data, playerID, enemyID);
-                rel.status = "war";
-                rel.sinceTurn = currentTurn;
-                rel.lastChangedTurn = currentTurn;
-                rel.lastWarTurn = currentTurn;
-                rel.warReason = "Support an Ally";
-                rel.warConflictID = conflictID;
-                diplomacy.warStats = diplomacy.warStats or {};
-                local warKey = PairKey(playerID, enemyID);
-                diplomacy.warStats[warKey] = diplomacy.warStats[warKey] or {
-                    key=warKey, player1=playerID, player2=enemyID, startTurn=currentTurn, active=true,
-                    reason="Support an Ally", conflictID=conflictID, attacks=0,
-                    casualties={[tostring(playerID)]=0,[tostring(enemyID)]=0},
-                    territoriesCaptured={[tostring(playerID)]=0,[tostring(enemyID)]=0},
-                    economicImpact={[tostring(playerID)]=0,[tostring(enemyID)]=0}
-                };
-                RemoveTradeAgreementBetween(data, playerID, enemyID, GetPlayerName(game, playerID) .. " joined a faction war against " .. GetPlayerName(game, enemyID) .. ".");
+        -- Do not silently turn an existing ally into an enemy.  The player
+        -- must resolve contradictory diplomatic commitments first.
+        for enemyID, participating in pairs(enemySide) do
+            if participating == true and IsActiveAlly(enemyID) then
+                setReturn({
+                    success=false,
+                    message="You are allied with " .. GetPlayerName(game, enemyID) .. ". End that Alliance before joining the opposing side."
+                });
+                return;
             end
         end
-        AddDiplomacyHistory(data, "war_joined", playerID, 0, GetPlayerName(game, playerID) .. " joined the conflict in support of a Faction ally.", {conflictID=conflictID, side=side});
+
+        for friendlyID, participating in pairs(ourSide) do
+            if participating == true then
+                local friendlyRelationship = GetRelationship(data, playerID, friendlyID);
+                if friendlyRelationship ~= nil and friendlyRelationship.status == "war" then
+                    setReturn({
+                        success=false,
+                        message="You are currently at war with " .. GetPlayerName(game, friendlyID) .. ". Make peace before joining that side."
+                    });
+                    return;
+                end
+            end
+        end
+
+        ourSide[playerID] = true;
+        local currentTurn = GetCurrentEconomyTurn(data);
+        local joinedAgainst = 0;
+
+        for enemyID, participating in pairs(enemySide) do
+            if participating == true and PlayerAvailable(game, enemyID) then
+                local rel = GetRelationship(data, playerID, enemyID);
+
+                if rel.status ~= "war" then
+                    EnterWar(data, game, playerID, enemyID, "join_war");
+                end
+
+                rel = GetRelationship(data, playerID, enemyID);
+                rel.warReason = "Support an Ally";
+                rel.warConflictID = conflictID;
+
+                local warKey = PairKey(playerID, enemyID);
+                local stats = diplomacy.warStats[warKey];
+                if stats == nil then
+                    stats = {
+                        key=warKey,
+                        player1=playerID,
+                        player2=enemyID,
+                        startTurn=currentTurn,
+                        active=true,
+                        reason="Support an Ally",
+                        conflictID=conflictID,
+                        attacks=0,
+                        casualties={[tostring(playerID)]=0,[tostring(enemyID)]=0},
+                        territoriesCaptured={[tostring(playerID)]=0,[tostring(enemyID)]=0},
+                        economicImpact={[tostring(playerID)]=0,[tostring(enemyID)]=0}
+                    };
+                    diplomacy.warStats[warKey] = stats;
+                else
+                    stats.active = true;
+                    stats.reason = stats.reason or "Support an Ally";
+                    stats.conflictID = conflictID;
+                    stats.startTurn = stats.startTurn or currentTurn;
+                    stats.casualties = stats.casualties or {};
+                    stats.territoriesCaptured = stats.territoriesCaptured or {};
+                    stats.economicImpact = stats.economicImpact or {};
+                end
+
+                joinedAgainst = joinedAgainst + 1;
+            end
+        end
+
+        if joinedAgainst < 1 then
+            ourSide[playerID] = nil;
+            setReturn({success=false, message="There are no active enemy nations available to join against."});
+            return;
+        end
+
+        local sideNames = {};
+        for memberID, participating in pairs(ourSide) do
+            if participating == true then
+                table.insert(sideNames, GetPlayerName(game, memberID));
+            end
+        end
+        table.sort(sideNames);
+
+        AddDiplomacyHistory(
+            data,
+            "war_joined",
+            playerID,
+            0,
+            GetPlayerName(game, playerID) .. " joined Conflict #" .. tostring(conflictID)
+                .. " in support of " .. table.concat(sideNames, ", ") .. ".",
+            {conflictID=conflictID, side=side, reason="Support an Ally"}
+        );
+
+        AddWorldEvent(
+            data.globalEconomy,
+            "war_joined",
+            playerID,
+            GetPlayerName(game, playerID) .. " joined Conflict #" .. tostring(conflictID)
+                .. " in support of an allied/faction partner.",
+            {conflictID=conflictID, side=side}
+        );
+
         Mod.PublicGameData = data;
-        setReturn({success=true, message="Your nation joined the war on Side " .. side .. "."});
+        setReturn({
+            success=true,
+            message="Your nation joined Conflict #" .. tostring(conflictID)
+                .. " in support of " .. table.concat(sideNames, ", ") .. "."
+        });
         return;
     end
 
