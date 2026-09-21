@@ -1,71 +1,90 @@
 # Global Affairs V3
 
-A large-scale War.app Commerce, diplomacy, economic, market, resource, United Nations, and strategic-AI mod evolved from Trade Agreement V2.
+Global Affairs V3 is a large-scale War.app expansion focused on Commerce, diplomacy, markets, strategic resources, warfare, and smarter AI.
 
-## Core systems
+## Core Systems
 
-- Bilateral Trade Agreements with recurring Commerce benefits.
-- Investment projects with funding, risk, development time, success/failure, and AI participation.
-- Stock market with flagship companies, founder shares, portfolios, dividends, stock splits, share issuance, ETF trading, and AI investors.
-- Taxation and eight economic/political ideology choices.
-- Diplomacy with wars, peace, NAPs, alliances, player search/overview, current-war statistics, and history.
-- Player AI Manager for markets and investments with a player-defined budget.
-- Strategic Resources with territory deposits, facility development, resource contracts, shortages, Military Readiness, Commerce penalties, and unrest.
+- Commerce economy with taxation, ideology, Trade Agreements, investments, and national growth.
+- Flagship companies, stock trading, dividends, portfolios, stock splits, ETF trading, and AI investors.
+- War Bonds that allow wartime financing with a defined term and target payout.
+- Strategic Resources including Oil, Gas, Uranium, Iron, Food, Rare Earths, and optional Coal, Copper, and Lithium.
+- Persistent national resource stockpiles: positive net production is stored, and later deficits consume stockpile reserves before uncovered shortages create penalties.
+- Resource facilities with immediate Commerce payment, ownership transfer through territorial capture, and production tied to controlled territory.
+- Military Readiness driven by strategic-resource availability.
+- Army Recruiters that generate armies based on recruiter level and Military Readiness while adding resource maintenance demand.
+- Diplomacy with wars, peace, Non-Aggression Pacts, alliances, factions, player search/overview, relationship history, and coalition Current Wars.
+- Direct Join War controls that let a human nation choose which side of an active conflict to support, subject to diplomacy safety checks.
+- War Events with player choices and automatic balanced resolution when a human does not respond in time.
 - Optional United Nations / Security Council with permanent and rotating members, vetoes, AI voting, sanctions, embargoes, aid, condemnations, and ceasefires.
-- War Events with player choices and automatic balanced resolution if a human does not respond in time.
-- Mobile-focused UI, searchable Markets/Diplomacy, customizable tabs, and an expanded How It Works guide.
+- AI Manager for player-authorized market and investment spending with a defined per-turn budget and visible spending breakdown.
+- Smart AI for markets, investments, resources, diplomacy, war targeting, and other economic decisions.
+- Mobile-focused UI, customizable tabs, player search, and an expanded How It Works guide.
 
-## Strategic Resources
+## Markets and ETF
 
-Resources include Oil, Gas, Uranium, Iron, Food, Rare Earths, and optional Coal, Copper, and Lithium. Territory ownership determines production. Capturing a resource territory transfers its production to the new owner after the turn resolves. Nations that fall below their resource requirements can suffer Commerce penalties, lower Military Readiness, and unrest. Existing armies are never deleted by a shortage.
+Eligible nations may establish flagship companies using Growth, Balanced, or Dividend strategies. Players and AI can buy and sell shares, receive dividends, track cost basis and profit/loss, and trade the global ETF.
 
-Each resource territory displays one dominant-resource map icon with a numeric badge for its combined facility/deposit level. Resource facility construction and upgrades cost gold. The host may disable resource icons globally while leaving the underlying resource economy active.
+The Market Overview includes gainers, downtrend stocks, company confidence, owner unrest, and trend information. The ETF rebalances every 5 turns and can provide visible holder distributions in addition to normal ETF dividends.
+
+## Strategic Resources and Stockpiles
+
+Territory ownership determines resource production. Capturing a resource territory transfers its future production to the new owner after the turn resolves.
+
+Each nation also tracks resource requirements and a persistent national stockpile. Positive net production is added to that resource's stockpile each turn. When production falls below requirements, the stockpile is consumed first. Only the uncovered portion of a shortage applies shortage penalties.
+
+Resource shortages can reduce Commerce, lower Military Readiness, and increase unrest. Existing armies are never deleted because of a shortage.
+
+Each resource territory displays one dominant-resource map icon with a numeric badge for its combined facility/deposit level. The host may disable resource map icons while leaving the resource economy active.
+
+## Army Recruiters
+
+When enabled by the host, players may build and upgrade Army Recruiters on owned territories.
+
+- Recruiters generate armies on their territory each turn.
+- Output scales with Military Readiness.
+- Recruiter levels add strategic-resource maintenance demand.
+- Recruiters transfer with the territory when captured.
+- Build and upgrade costs are deducted immediately when the action succeeds.
+- Failed or unaffordable actions do not charge the player.
+
+## Current Wars and Join War
+
+Current Wars groups coalition conflicts into one conflict entry instead of displaying every bilateral relationship as a separate war. Each conflict keeps its original cause directly under the matchup and tracks start turn, duration, attacks, combat losses, territories captured, and direct wartime decision costs.
+
+A human nation that is not already participating may choose a side through the Join War controls. Diplomacy safety checks prevent joining in a way that would place the player against an active ally or on the same side as a nation they are already fighting. Joining adds the nation to the existing coalition conflict rather than creating a duplicate conflict entry.
+
+Normal independent AI war declarations require a shared land border. Alliance, faction, and join-war situations can create broader conflicts.
 
 ## United Nations / Security Council
 
-The UN is optional and host-configurable. The default council uses five permanent and ten rotating seats. Permanent members may veto Security Council resolutions. Human council members vote YES / NO / ABSTAIN; AI council members vote automatically. Proposal cooldowns prevent spam.
+The UN is optional and host-configurable. Permanent members may veto Security Council resolutions. Human council members vote YES / NO / ABSTAIN; AI council members vote automatically. Proposal cooldowns prevent resolution spam.
 
-Initial resolutions: Sanctions, Embargo, Economic Aid, Condemnation, and Ceasefire.
+Supported actions include Economic Sanctions, Trade Embargo, Economic Aid, Condemn Nation, and Peace / Ceasefire.
 
-## Current Wars and War Events
+## AI Manager
 
-Current Wars groups coalition conflicts into one entry, keeps the original cause directly under each fight, and tracks war start turn, duration, attacks, combat losses, territories captured, and direct wartime decision costs. Eligible Alliance or Faction partners can join an active side from the conflict entry. Human nations periodically receive strategic wartime choices when enabled by the host. If a choice is ignored for one turn, the mod applies a balanced response automatically.
+When allowed by the host, human players may enable an AI Manager with a defined per-turn budget. The manager handles authorized market and investment activity and reports budget, amount spent, unused amount, Commerce before/after spending, and a spending breakdown.
 
-## Performance architecture
+It does not take over diplomacy, tax policy, ideology, or military orders.
 
-Phase 8 adds large-game performance safeguards:
+## Performance
 
-- Commerce income and stored gold are cached once per player per advance.
-- AI strategic threat information is calculated in one shared map pass rather than one full-map scan per AI.
-- City selection uses cached owned-territory lists.
-- Peace-border deployment checks are cached per territory during the order phase.
-- War combat statistics are accumulated and persisted once at the end of the turn rather than writing PublicGameData on every attack.
-- Non-urgent AI diplomacy, trade, city, and economy work is staggered automatically as player counts grow.
-- Incoming diplomacy offers, resource processing, UN effects, active agreements, and critical turn-state maintenance still run every turn.
+Global Affairs V3 includes large-game performance safeguards such as cached economic data, shared AI threat calculations, cached territory lists, reduced repeated game-data writes, and automatic staggering of non-urgent AI work as player counts grow.
 
-The design target is normal-game advances around or below 20 seconds and Mega Game advances below roughly 30 seconds, subject to map size, number of orders, player count, and War.app server conditions.
+Critical maintenance, active agreements, resource processing, incoming diplomacy, UN effects, and required turn-state updates continue every turn.
 
-## Testing
+## Release QA
 
-For a release candidate, test a fresh multiplayer game and verify Trade, Investments, Markets, Dividends/ETF, Taxation/Ideology, AI Manager, Resources, UN, Current Wars, War Events, mobile UI, resource captures, eliminated players, and late-game turn performance.
+Before publishing a release build, verify the following in a fresh multiplayer game:
 
+- Commerce, taxation, ideology, Trade Agreements, and investments.
+- Stocks, dividends, ETF, War Bonds, and market displays.
+- Resource production, requirements, stockpile growth, stockpile depletion, facilities, and repeated territorial capture.
+- Military Readiness and Army Recruiter production, maintenance, capture, and immediate payment behavior.
+- Current Wars deduplication, war causes, Join War side selection, coalition membership, peace, and War Events.
+- United Nations voting and resolution effects.
+- AI Manager spending and Smart AI behavior.
+- Mobile UI and How It Works guidance.
+- 30–40 player regression testing and 100+ player Mega Game performance testing.
 
-## Phase 9 — Markets, Wars & Economic Clarity
-
-- AI independent war declarations now require a shared land border.
-- War declarations record one of six causes. Coalition wars show multiple nations per side, and eligible Alliance or Faction partners can join an active side without creating a duplicate conflict.
-- Global ETF rebalances every 5 turns and pays a visible holder bonus on rebalance turns, separate from normal ETF dividends.
-- Market Overview shows Top 5 gainers and Top 5 downtrend stocks with company confidence and owner unrest.
-- Growth companies favor price appreciation; Dividend companies appreciate more slowly and can raise payout rates when their flagship economy grows.
-- War Bonds let players finance nations currently at war for a 5-turn, 20% target return subject to issuer repayment capacity.
-- AI Manager reports its per-turn budget, actual spend, market/investment breakdown, and before/after Commerce estimate.
-- Strategic Resource maintenance requirements are locked to each nation's starting production profile. Positive net production accumulates in a persistent national stockpile, and later deficits consume that stockpile before uncovered shortages create penalties.
-
-
-## Phase 10 — Army Recruiters & Immediate Construction Payment
-
-- Hosts can enable Army Recruiters and configure base cost, maximum recruiter territories, base armies per level/turn, and maximum level.
-- Players build or upgrade a recruiter on an owned territory from the Resources tab. Commerce is deducted immediately when the order is confirmed.
-- Recruiter output is scaled by Military Readiness and each recruiter level adds +1 Oil, +1 Food and +1 Iron to national maintenance requirements.
-- Recruiters are tied to territory, so capturing the territory transfers the recruiter to the new owner.
-- Strategic Resource facility construction/upgrades also deduct Commerce immediately; prepaid construction is refunded if the territory is lost before resolution.
+Gameplay features should be considered confirmed only after they have been tested in War.app.

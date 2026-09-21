@@ -11433,7 +11433,7 @@ end
             return;
         end
 
-        -- Phase 10: pay at the moment the player confirms construction.
+        -- Pay at the moment the player confirms construction.
         RemoveGold(game, playerID, cost);
         table.insert(resourceData.pendingBuilds, {
             playerID = playerID,

@@ -14433,7 +14433,7 @@ local function ProcessPendingResourceBuilds(game, data, resourceChanges, addNewO
                 {}, {terrMod}, nil, nil
             );
             addNewOrder(event);
-            -- Phase 10 builds are already paid when ordered. Keep legacy compatibility.
+            -- New builds are already paid when ordered. Keep legacy compatibility.
             if build.paid ~= true then
                 AddResourceChange(resourceChanges, build.playerID, -(build.cost or 0));
             end

@@ -1,76 +1,20 @@
 GLOBAL AFFAIRS V3
 
-Global Affairs V3 is a Commerce-focused economy, diplomacy, market, strategic-resource, United Nations, and enhanced-AI mod for War.app.
+A full economy, diplomacy, market, resource, and strategic-warfare expansion for War.app.
 
-CORE ECONOMY
+Build your nation through Commerce, trade, investments, markets, strategic resources, diplomacy, and war.
 
-Players manage Commerce through taxation, ideology, trade agreements, investments, flagship companies, stocks, dividends, ETF holdings, and strategic resources. Commerce is both economic power and an important source of military purchasing power.
+KEY FEATURES
 
-TRADE AGREEMENTS
+• Commerce economy with taxation, ideology, trade agreements, and investments
+• Flagship companies, stocks, dividends, ETF investing, and War Bonds
+• Strategic resources with production, requirements, stockpiles, shortages, and facilities
+• Military Readiness and Army Recruiters tied to national resource strength
+• Diplomacy, alliances, factions, Current Wars, Join War, and War Events
+• Optional United Nations / Security Council with sanctions, embargoes, aid, condemnations, and ceasefires
+• Smart AI for economy, markets, diplomacy, resources, and warfare
+• Host controls for major systems and large-game performance safeguards
 
-Players may propose bilateral Trade Agreements with human or AI nations. Active agreements provide recurring Commerce benefits while the nations remain eligible to trade. War, diplomatic restrictions, and some UN actions can interrupt or end trade.
+Designed for diplomacy-heavy games, economy and strategy players, large multiplayer matches, and Mega Games.
 
-INVESTMENTS
-
-Players and AI may create and fund investment projects. Projects have funding goals, development times, risk, potential returns, and failure/recovery rules. Successful projects return principal plus profit; unfunded projects refund committed principal under the configured rules.
-
-MARKETS
-
-Eligible nations may establish flagship companies. Players and AI can buy and sell shares, receive dividends, track cost basis and profit/loss, trade an ETF, and view market history. Companies support Growth, Balanced, and Dividend strategies. Owners may issue new public shares with a cooldown, and high-priced companies may perform 2-for-1 stock splits.
-
-TAXATION AND IDEOLOGY
-
-Tax policies: Low, Standard, High.
-
-Ideologies include Free Market, Capitalist, Social Democratic, State Capitalist, Socialist, Communist, Fascist, and Nationalist. Ideology influences Commerce, market/investment behavior, company confidence, and AI economic decisions.
-
-DIPLOMACY AND WAR
-
-Diplomacy includes player search/overview, wars, peace, Non-Aggression Pacts, alliances, relationship history, and Current Wars. Current Wars tracks war duration, attacks, combat losses, territories captured, and direct wartime decision costs.
-
-War Events can present human players with strategic choices. Players have one turn to answer; an unanswered event automatically receives a balanced response. Existing armies are never deleted by these systems.
-
-AI MANAGER
-
-When allowed by the host, human players may enable an AI Manager with a defined per-turn budget. The manager handles markets and investments only. It does not control diplomacy, trade agreements, tax policy, ideology, or military orders. Canceling it takes effect after the configured one-turn delay.
-
-STRATEGIC RESOURCES
-
-When enabled, territories may contain Oil, Gas, Uranium, Iron, Food, Rare Earths, and optional Coal, Copper, and Lithium. Production follows territory ownership, so capturing a resource territory transfers its production after the turn resolves.
-
-Nations have resource requirements. Falling below them can reduce Commerce, lower Military Readiness, and increase unrest. Existing armies are not removed by shortages. Players may develop/upgrade resource facilities with gold and create recurring resource trade contracts.
-
-Each resource territory shows one dominant-resource icon with a numeric badge representing its combined facility/deposit level. The host may disable resource map icons globally while leaving the resource economy active.
-
-UNITED NATIONS / SECURITY COUNCIL
-
-The UN is optional and host-controlled. The Security Council has configurable permanent and rotating seats. Permanent members have veto power over Security Council resolutions. Human council members vote YES / NO / ABSTAIN and AI council members vote automatically.
-
-Initial resolutions:
-- Economic Sanctions
-- Trade Embargo
-- Economic Aid
-- Condemn Nation
-- Peace / Ceasefire
-
-Proposal cooldowns prevent resolution spam, and the UN screen explains the effect of each resolution before submission.
-
-SMART AI
-
-AI nations can manage strategic reserves, markets, investments, city construction, trade strategy, diplomacy, peaceful-border troop limits, and wartime behavior. Large games automatically stagger non-urgent AI work to reduce advance-turn time while critical maintenance continues every turn.
-
-HOW IT WORKS
-
-The in-game How It Works guide provides a Quick Start, examples, resource roles, Military Readiness explanations, map-icon guidance, market and investment instructions, diplomacy/war guidance, AI Manager instructions, UN consequences, and host configuration guidance.
-
-HOST CONFIGURATION
-
-Major systems including Resources, resource map icons, the United Nations, AI Manager availability, War Events, market/economic settings, and other mechanics are host-configurable.
-
-PERFORMANCE
-
-Global Affairs V3 includes large-game performance safeguards such as per-turn economic caches, shared AI threat calculation, cached territory lists, reduced repeated data writes, and automatic AI work staggering for larger and Mega Games.
-
-GENERAL NOTES
-
-This mod is designed primarily for Commerce games. Economic and diplomatic systems develop across multiple turns. For best results, use the in-game How It Works guide and review your nation's Commerce, resource position, Military Readiness, diplomacy, investments, and market exposure regularly.
+Use the in-game How It Works guide for detailed mechanics, examples, and host configuration help.

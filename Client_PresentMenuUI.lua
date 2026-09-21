@@ -12444,7 +12444,7 @@ function ShowHowItWorks(parent)
     Section(
         "DIPLOMACY & CURRENT WARS",
         "Official Peace / War relationships determine when nations may attack each other. Diplomacy also supports NAPs, alliances, factions, peace offers, and delayed war declarations.\n\n" ..
-        "The Current Wars section groups coalition wars into a single conflict, keeps the original war cause directly under that fight, and shows start turn, duration, attacks, combat losses, captured territories, and direct wartime decision costs. Eligible Alliance or Faction partners can join an existing side from the same conflict card.\n\n" ..
+        "The Current Wars section groups coalition wars into a single conflict, keeps the original war cause directly under that fight, and shows start turn, duration, attacks, combat losses, captured territories, and direct wartime decision costs. A human nation that is not already participating can choose which side to support from the same conflict entry, subject to diplomacy safety checks.\n\n" ..
         "Combat losses are recorded from actual Attack/Transfer results. The economic-impact line only counts direct costs created by this mod's wartime decision system; it does not pretend to measure every indirect economic consequence of war."
     );
 
