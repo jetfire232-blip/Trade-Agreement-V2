@@ -16695,6 +16695,94 @@ local function ProcessWarBonds(game, data, resourceChanges)
 end
 
 -- =========================================================
+-- PUBLIC GAME DATA COMPACTION
+-- =========================================================
+-- War.app limits PublicGameData to 1,000,000 serialized bytes.  Global Affairs
+-- stores many optional histories for UI/reporting, so large games can otherwise
+-- grow past that limit after enough turns.  Keep gameplay-critical/live state,
+-- but aggressively bound historical/report-only collections before every save.
+
+local function TrimArrayKeepNewest(list, maxItems)
+    if type(list) ~= "table" then return; end
+    while #list > maxItems do
+        table.remove(list, 1);
+    end
+end
+
+local function TrimArrayKeepNewestFront(list, maxItems)
+    if type(list) ~= "table" then return; end
+    -- Some histories insert newest entries at index 1.
+    while #list > maxItems do
+        table.remove(list);
+    end
+end
+
+local function CompactPublicGameData(data)
+    if type(data) ~= "table" then return; end
+
+    TrimArrayKeepNewest(data.tradeHistory, 30);
+    TrimArrayKeepNewest(data.investmentHistory, 30);
+    TrimArrayKeepNewest(data.completedInvestmentProjects, 30);
+
+    local economy = data.globalEconomy;
+    if type(economy) ~= "table" then return; end
+
+    TrimArrayKeepNewest(economy.worldEvents, 30);
+    TrimArrayKeepNewest(economy.pendingWorldReportEvents, 10);
+    TrimArrayKeepNewest(economy.transactionLedger, 30);
+
+    for _, nation in pairs(economy.nations or {}) do
+        TrimArrayKeepNewest(nation.personalEventQueue, 10);
+    end
+
+    local market = economy.market;
+    if type(market) == "table" then
+        TrimArrayKeepNewest(market.transactions, 40);
+        TrimArrayKeepNewest(market.news, 30);
+        TrimArrayKeepNewest(market.priceHistory, 12);
+
+        for _, company in pairs(market.companies or {}) do
+            if type(company) == "table" then
+                TrimArrayKeepNewest(company.priceHistory, 12);
+            end
+        end
+
+        if type(market.etf) == "table" then
+            TrimArrayKeepNewest(market.etf.priceHistory, 12);
+        end
+    end
+
+    local diplomacy = economy.diplomacy;
+    if type(diplomacy) == "table" then
+        TrimArrayKeepNewest(diplomacy.history, 40);
+        TrimArrayKeepNewestFront(diplomacy.warEventHistory, 30);
+
+        -- Current Wars only needs active pairwise statistics/conflicts.  Finished
+        -- wars remain represented by the bounded diplomacy/war-event histories.
+        for key, stats in pairs(diplomacy.warStats or {}) do
+            if type(stats) ~= "table" or stats.active == false then
+                diplomacy.warStats[key] = nil;
+            end
+        end
+        for conflictID, conflict in pairs(diplomacy.warConflicts or {}) do
+            if type(conflict) ~= "table" or conflict.active == false then
+                diplomacy.warConflicts[conflictID] = nil;
+            end
+        end
+    end
+
+    local resources = economy.resources;
+    if type(resources) == "table" then
+        TrimArrayKeepNewest(resources.tradeHistory, 20);
+    end
+
+    local un = economy.unitedNations;
+    if type(un) == "table" then
+        TrimArrayKeepNewest(un.resolutionHistory, 25);
+    end
+end
+
+-- =========================================================
 -- MAIN TURN HOOK
 -- =========================================================
 
@@ -16705,6 +16793,10 @@ function Server_AdvanceTurn_Start(
 
     local data =
         GetEconomicData();
+
+    -- Compact first so an older large save gets headroom before this turn adds
+    -- any new market, diplomacy, resource, or war records.
+    CompactPublicGameData(data);
 
     TURN_COMMERCE_INCOME_CACHE = {};
     TURN_STORED_GOLD_CACHE = {};
@@ -17154,6 +17246,7 @@ end
     -- SAVE
     -- =====================================================
 
+    CompactPublicGameData(data);
     Mod.PublicGameData =
         data;
 
@@ -17736,6 +17829,7 @@ end
     -- Normally Server_AdvanceTurn_End persists accumulated war statistics once.
     -- Keep a fallback write only if this hook ever runs without the turn cache.
     if ADVANCE_TURN_ORDER_DATA_CACHE == nil then
+        CompactPublicGameData(data);
         Mod.PublicGameData = data;
     end
 
@@ -17852,6 +17946,7 @@ function Server_AdvanceTurn_End(
         data
     );
 
+    CompactPublicGameData(data);
     Mod.PublicGameData =
         data;
 

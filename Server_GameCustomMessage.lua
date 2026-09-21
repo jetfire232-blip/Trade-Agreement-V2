@@ -3123,6 +3123,86 @@ end
 
 
 -- =========================================================
+-- PUBLIC GAME DATA COMPACTION
+-- =========================================================
+-- Keep the same bounded-history policy used by Server_AdvanceTurn so a custom
+-- action cannot re-save an oversized PublicGameData table between turns.
+
+local function TrimArrayKeepNewestForSave(list, maxItems)
+    if type(list) ~= "table" then return; end
+    while #list > maxItems do
+        table.remove(list, 1);
+    end
+end
+
+local function TrimArrayKeepNewestFrontForSave(list, maxItems)
+    if type(list) ~= "table" then return; end
+    while #list > maxItems do
+        table.remove(list);
+    end
+end
+
+local function CompactPublicGameDataForSave(data)
+    if type(data) ~= "table" then return; end
+
+    TrimArrayKeepNewestForSave(data.tradeHistory, 30);
+    TrimArrayKeepNewestForSave(data.investmentHistory, 30);
+    TrimArrayKeepNewestForSave(data.completedInvestmentProjects, 30);
+
+    local economy = data.globalEconomy;
+    if type(economy) ~= "table" then return; end
+
+    TrimArrayKeepNewestForSave(economy.worldEvents, 30);
+    TrimArrayKeepNewestForSave(economy.pendingWorldReportEvents, 10);
+    TrimArrayKeepNewestForSave(economy.transactionLedger, 30);
+
+    for _, nation in pairs(economy.nations or {}) do
+        TrimArrayKeepNewestForSave(nation.personalEventQueue, 10);
+    end
+
+    local market = economy.market;
+    if type(market) == "table" then
+        TrimArrayKeepNewestForSave(market.transactions, 40);
+        TrimArrayKeepNewestForSave(market.news, 30);
+        TrimArrayKeepNewestForSave(market.priceHistory, 12);
+        for _, company in pairs(market.companies or {}) do
+            if type(company) == "table" then
+                TrimArrayKeepNewestForSave(company.priceHistory, 12);
+            end
+        end
+        if type(market.etf) == "table" then
+            TrimArrayKeepNewestForSave(market.etf.priceHistory, 12);
+        end
+    end
+
+    local diplomacy = economy.diplomacy;
+    if type(diplomacy) == "table" then
+        TrimArrayKeepNewestForSave(diplomacy.history, 40);
+        TrimArrayKeepNewestFrontForSave(diplomacy.warEventHistory, 30);
+        for key, stats in pairs(diplomacy.warStats or {}) do
+            if type(stats) ~= "table" or stats.active == false then
+                diplomacy.warStats[key] = nil;
+            end
+        end
+        for conflictID, conflict in pairs(diplomacy.warConflicts or {}) do
+            if type(conflict) ~= "table" or conflict.active == false then
+                diplomacy.warConflicts[conflictID] = nil;
+            end
+        end
+    end
+
+    local resources = economy.resources;
+    if type(resources) == "table" then
+        TrimArrayKeepNewestForSave(resources.tradeHistory, 20);
+    end
+
+    local un = economy.unitedNations;
+    if type(un) == "table" then
+        TrimArrayKeepNewestForSave(un.resolutionHistory, 25);
+    end
+end
+
+-- =========================================================
 -- MAIN HOOK
 -- =========================================================
 
@@ -3150,6 +3230,10 @@ function Server_GameCustomMessage(
 
     local data =
         GetData();
+
+    -- Compact as soon as a request arrives so large ongoing games can recover
+    -- before this action writes PublicGameData again.
+    CompactPublicGameDataForSave(data);
 
     local resourceData =
         EnsureResourceData(
@@ -3765,6 +3849,7 @@ nation.stockCostBasis[
             economy;
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -3917,6 +4002,7 @@ nation.stockCostBasis[
         data.globalEconomy =
             economy;
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -4395,6 +4481,7 @@ nation.stockCostBasis[
             economy;
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -4865,6 +4952,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -5007,6 +5095,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -5190,6 +5279,7 @@ end
             {conflictID=conflictID, side=side}
         );
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({
             success=true,
@@ -5244,6 +5334,7 @@ end
         });
         market.nextHoldingID = market.nextHoldingID + 1;
         data.globalEconomy = economy;
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({success=true, message="War Bond purchased for " .. tostring(amount) .. " Commerce. It matures in " .. tostring(duration) .. " turns for " .. tostring(math.floor(amount*(1+rate/100)+0.5)) .. " Commerce if the issuer can repay."});
         return;
@@ -5464,6 +5555,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -5571,6 +5663,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -5637,6 +5730,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -5793,6 +5887,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -6090,6 +6185,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -6283,6 +6379,7 @@ AddDiplomacyHistory(
 );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -6400,6 +6497,7 @@ if payload.type == "acceptAllianceOffer" then
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -6434,6 +6532,7 @@ local pairKey =
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -6505,6 +6604,7 @@ AddDiplomacyHistory(
 );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -6608,6 +6708,7 @@ AddDiplomacyHistory(
 );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -6749,6 +6850,7 @@ if payload.type == "endAlliance" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -6903,6 +7005,7 @@ if payload.type == "createFaction" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -7090,6 +7193,7 @@ if payload.type == "inviteToFaction" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -7237,6 +7341,7 @@ if payload.type == "acceptFactionInvite" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -7324,6 +7429,7 @@ if payload.type == "rejectFactionInvite" then
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -7435,6 +7541,7 @@ if payload.type == "leaveFaction" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -7575,6 +7682,7 @@ if payload.type == "disbandFaction" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -7689,6 +7797,7 @@ if payload.type == "removeFactionMember" then
     );
 
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -7799,6 +7908,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -7954,6 +8064,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -8110,6 +8221,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -8458,6 +8570,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -8580,6 +8693,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -8814,6 +8928,7 @@ table.insert(
     }
 );
 
+CompactPublicGameDataForSave(data);
 Mod.PublicGameData =
     data;
 
@@ -8890,6 +9005,7 @@ if payload.type == "cancelPendingInvestment" then
         return;
     end
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -9054,8 +9170,9 @@ then
         }
     );
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
-    data;
+        data;
     
     setReturn({
         success = true,
@@ -9333,6 +9450,7 @@ nation.stockLastBuyTurn[
         }
     );
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -9522,6 +9640,7 @@ etf.sharesAvailable =
         }
     );
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -9711,6 +9830,7 @@ end
         }
     );
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -9973,6 +10093,7 @@ end
         }
     );
 
+    CompactPublicGameDataForSave(data);
     Mod.PublicGameData =
         data;
 
@@ -10266,6 +10387,7 @@ end
                 );
 
 
+                CompactPublicGameDataForSave(data);
                 Mod.PublicGameData =
                     data;
 
@@ -10310,6 +10432,7 @@ end
                 );
 
 
+                CompactPublicGameDataForSave(data);
                 Mod.PublicGameData =
                     data;
 
@@ -10366,6 +10489,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -10467,6 +10591,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -10502,6 +10627,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -10586,6 +10712,7 @@ end
             );
 
 
+            CompactPublicGameDataForSave(data);
             Mod.PublicGameData =
                 data;
 
@@ -10650,6 +10777,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -10782,6 +10910,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -10841,6 +10970,7 @@ end
         nation.showWarEventAlerts =
             payload.enabled == true;
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -10968,6 +11098,7 @@ end
         nation.pendingWarEvent = nil;
         nation.pendingWarEventConsequence = consequence;
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -11188,6 +11319,7 @@ end
         ] =
             currentTurn;
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -11303,6 +11435,7 @@ end
         ] =
             vote;
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
@@ -11365,6 +11498,7 @@ end
         table.insert(recruiters.pendingBuilds, {playerID=playerID, territoryID=territoryID, fromLevel=currentLevel, toLevel=newLevel, cost=cost, paid=true, requestedTurn=data.tradeTurn or 0});
         -- Reserve the level immediately to prevent duplicate purchases before the next turn.
         recruiters.territories[territoryID] = newLevel;
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({success=true, message="Army Recruiter level " .. tostring(newLevel) .. " scheduled. " .. tostring(cost) .. " Commerce was deducted immediately."});
         return;
@@ -11446,6 +11580,7 @@ end
             requestedTurn = data.tradeTurn or 0
         });
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         local actionText = currentLevel <= 0 and "facility construction" or "facility upgrade";
         setReturn({success=true, message=resourceName .. " " .. actionText .. " scheduled for next turn. " .. tostring(cost) .. " Commerce was deducted immediately."});
@@ -11514,6 +11649,7 @@ end
             pricePerUnit = pricePerUnit,
             createdTurn = data.tradeTurn or 0
         });
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({success=true, message="Resource trade offer sent."});
         return;
@@ -11539,6 +11675,8 @@ end
             amount = offer.amount,
             pricePerUnit = offer.pricePerUnit
         });
+        TrimArrayKeepNewestForSave(resourceData.tradeHistory, 20);
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({success=true, message="Resource trade contract activated."});
         return;
@@ -11553,6 +11691,7 @@ end
             return;
         end
         table.remove(resourceData.pendingOffers, index);
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({success=true, message="Resource trade offer rejected."});
         return;
@@ -11569,6 +11708,7 @@ end
             return;
         end
         table.remove(resourceData.activeTrades, tradeIndex);
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData = data;
         setReturn({success=true, message="Resource trade contract canceled."});
         return;
@@ -11695,6 +11835,7 @@ end
         );
 
 
+        CompactPublicGameDataForSave(data);
         Mod.PublicGameData =
             data;
 
