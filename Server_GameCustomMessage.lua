@@ -5080,27 +5080,10 @@ end
             return alliance ~= nil and alliance.active == true;
         end
 
-        -- Joining is a support action, not a free-form declaration.  The
-        -- player must have an Alliance or Faction connection to somebody on
-        -- the side they want to support.
-        local eligible = false;
-        for memberID, participating in pairs(ourSide) do
-            if participating == true
-                and memberID ~= playerID
-                and (IsFactionMate(memberID) or IsActiveAlly(memberID))
-            then
-                eligible = true;
-                break;
-            end
-        end
-
-        if not eligible then
-            setReturn({
-                success=false,
-                message="You may join a war only to support an active Alliance or Faction member already fighting on that side."
-            });
-            return;
-        end
+        -- Human players may directly join either side of an active conflict.
+        -- Alliance/faction ties remain strategically relevant, but are not a
+        -- hard requirement for the manual Join War action. Contradictory
+        -- diplomatic commitments are still blocked below.
 
         -- Do not silently turn an existing ally into an enemy.  The player
         -- must resolve contradictory diplomatic commitments first.

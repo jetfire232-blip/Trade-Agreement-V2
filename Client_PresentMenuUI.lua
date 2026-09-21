@@ -1109,7 +1109,20 @@ end
         local sideBIDs = SortedWarParticipantIDs(sideB);
 
         if #sideAIDs > 0 and #sideBIDs > 0 then
-            activeWarCount = activeWarCount + 1;
+            local hasActivePair = false;
+            for _, playerA in ipairs(sideAIDs) do
+                for _, playerB in ipairs(sideBIDs) do
+                    local relationship = relationships[CurrentWarsPairKey(playerA, playerB)];
+                    if relationship ~= nil and relationship.status == "war" then
+                        hasActivePair = true;
+                        break;
+                    end
+                end
+                if hasActivePair then break; end
+            end
+
+            if hasActivePair then
+                activeWarCount = activeWarCount + 1;
 
             local totalAttacks = 0;
             local totalCasualties = {};
@@ -1184,56 +1197,41 @@ end
             local joinConflictID = conflictID;
             local alreadyInConflict = sideA[ourID] == true or sideB[ourID] == true;
             if not alreadyInConflict then
-                local canJoinA = CanJoinWarSide(sideA, sideB);
-                local canJoinB = CanJoinWarSide(sideB, sideA);
+                UI.CreateLabel(area)
+                    .SetText("JOIN WAR: Choose the side your nation will support.");
 
-                if canJoinA or canJoinB then
-                    UI.CreateLabel(area)
-                        .SetText(
-                            "JOIN WAR: Support an allied or faction nation already fighting in this conflict."
+                UI.CreateButton(area)
+                    .SetText("JOIN " .. WarParticipantNames(sideAIDs))
+                    .SetOnClick(function()
+                        game.SendGameCustomMessage(
+                            "Joining war...",
+                            {type="joinWar", conflictID=joinConflictID, side="A"},
+                            function(result)
+                                if result and result.message then UI.Alert(result.message); end
+                                ShowDiplomacyMenu(parent, game);
+                            end
                         );
-                else
-                    UI.CreateLabel(area)
-                        .SetText(
-                            "Join War unavailable: you need an active Alliance or Faction connection to a nation on the side you want to support."
+                    end);
+
+                UI.CreateButton(area)
+                    .SetText("JOIN " .. WarParticipantNames(sideBIDs))
+                    .SetOnClick(function()
+                        game.SendGameCustomMessage(
+                            "Joining war...",
+                            {type="joinWar", conflictID=joinConflictID, side="B"},
+                            function(result)
+                                if result and result.message then UI.Alert(result.message); end
+                                ShowDiplomacyMenu(parent, game);
+                            end
                         );
-                end
-
-                if canJoinA then
-                    UI.CreateButton(area)
-                        .SetText("JOIN " .. WarParticipantNames(sideAIDs))
-                        .SetOnClick(function()
-                            game.SendGameCustomMessage(
-                                "Joining war...",
-                                {type="joinWar", conflictID=joinConflictID, side="A"},
-                                function(result)
-                                    if result and result.message then UI.Alert(result.message); end
-                                    ShowDiplomacyMenu(parent, game);
-                                end
-                            );
-                        end);
-                end
-
-                if canJoinB then
-                    UI.CreateButton(area)
-                        .SetText("JOIN " .. WarParticipantNames(sideBIDs))
-                        .SetOnClick(function()
-                            game.SendGameCustomMessage(
-                                "Joining war...",
-                                {type="joinWar", conflictID=joinConflictID, side="B"},
-                                function(result)
-                                    if result and result.message then UI.Alert(result.message); end
-                                    ShowDiplomacyMenu(parent, game);
-                                end
-                            );
-                        end);
-                end
+                    end);
             end
 
             UI.CreateLabel(area)
                 .SetText(
                     "----------------------------------------"
                 );
+            end
         end
     end
 

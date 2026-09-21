@@ -3287,6 +3287,33 @@ function ActivateDiplomacyPeace(
         warStats.endTurn = currentTurn;
     end
 
+    -- Keep coalition conflict records in sync with the actual pairwise war
+    -- relationships. Older builds could leave warConflicts.active=true after
+    -- peace, which made finished wars appear again in Current Wars.
+    local conflictID = relationship.warConflictID;
+    local conflict = conflictID and (diplomacy.warConflicts or {})[conflictID] or nil;
+    if conflict ~= nil then
+        local conflictStillActive = false;
+        for sideAID, sideAActive in pairs(conflict.sideA or {}) do
+            if sideAActive == true then
+                for sideBID, sideBActive in pairs(conflict.sideB or {}) do
+                    if sideBActive == true then
+                        local crossRelationship = GetDiplomacyRelationship(data, sideAID, sideBID);
+                        if crossRelationship ~= nil and crossRelationship.status == "war" then
+                            conflictStillActive = true;
+                            break;
+                        end
+                    end
+                end
+            end
+            if conflictStillActive then break; end
+        end
+        conflict.active = conflictStillActive;
+        if not conflictStillActive then
+            conflict.endTurn = currentTurn;
+        end
+    end
+
 
     diplomacy.pendingWarDeclarations[
         key
