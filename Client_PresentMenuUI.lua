@@ -1,6 +1,25 @@
 ContentArea = nil;
 local MAX_VISIBLE_HISTORY = 40;
 
+-- Safe local-player helpers. War.app can open mod UI in reviewer/spectator
+-- contexts where game.Us is nil; player-specific screens must not crash.
+local function GetLocalPlayerID(game)
+    if game ~= nil and game.Us ~= nil then
+        return game.Us.ID;
+    end
+    return nil;
+end
+
+local function IsViewerMode(game)
+    return GetLocalPlayerID(game) == nil;
+end
+
+local function ShowViewerModeNotice(area, text)
+    UI.CreateLabel(area).SetText(
+        text or "Viewer mode: this screen requires an active player."
+    );
+end
+
 InvestmentProjectTypes = {
     {
         id = "port",
@@ -398,7 +417,7 @@ local playerFaction =
 
 
     local ourID =
-        game.Us.ID;
+        GetLocalPlayerID(game);
 
 local ourFactionID =
     playerFaction[
@@ -3160,7 +3179,7 @@ function GetPolicyPreviewText(
         currentCommerce =
             GetPlayerIncome(
                 game,
-                game.Us.ID
+                GetLocalPlayerID(game)
             )
             or 0;
 
@@ -3358,7 +3377,7 @@ function ShowUnitedNationsMenu(parent, game)
 
     local lastProposalTurn =
         (un.lastProposalTurnByPlayer or {})[
-            game.Us.ID
+            GetLocalPlayerID(game)
         ];
 
     local proposalCooldownRemaining = 0;
@@ -3421,7 +3440,7 @@ function ShowUnitedNationsMenu(parent, game)
     local usID =
         game ~= nil
         and game.Us ~= nil
-        and game.Us.ID
+        and GetLocalPlayerID(game)
         or nil;
 
     local usPermanent =
@@ -4215,7 +4234,7 @@ function ShowCustomizeTabs(
     local ourNation =
         game ~= nil
         and game.Us ~= nil
-        and (economy.nations or {})[game.Us.ID]
+        and (economy.nations or {})[GetLocalPlayerID(game)]
         or nil;
 
     local warEventAlertsBox =
@@ -4351,9 +4370,15 @@ function ShowResourcesMenu(parent, game)
     local data = Mod.PublicGameData or {};
     local economy = data.globalEconomy or {};
     local resources = economy.resources or {};
-    local nation = (economy.nations or {})[game.Us.ID] or {};
+    local ourID = GetLocalPlayerID(game);
+    local nation = ourID ~= nil and (economy.nations or {})[ourID] or {};
 
     UI.CreateLabel(area).SetText("STRATEGIC RESOURCES");
+
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "Viewer mode: resource production exists normally, but personal stockpiles, trades, Recruiters, and facility actions require an active player.");
+        return;
+    end
 
     if GetClientSetting("ResourcesEnabled", true) ~= true then
         UI.CreateLabel(area).SetText("The host has disabled Strategic Resources.");
@@ -4606,7 +4631,7 @@ function ShowResourcesMenu(parent, game)
             local query = string.lower(searchInput.GetText() or "");
             local matches = {};
             for playerID, player in pairs(game.Game.Players or {}) do
-                if playerID ~= game.Us.ID and not player.Surrendered then
+                if playerID ~= GetLocalPlayerID(game) and not player.Surrendered then
                     local name = GetPlayerName(game, playerID);
                     if query == "" or string.find(string.lower(name), query, 1, true) ~= nil then
                         table.insert(matches, {id=playerID, name=name});
@@ -4647,7 +4672,7 @@ function ShowResourcesMenu(parent, game)
         UI.CreateLabel(area).SetText("INCOMING OFFERS");
         local foundIncoming = false;
         for _, offer in ipairs(resources.pendingOffers or {}) do
-            if offer.toPlayerID == game.Us.ID then
+            if offer.toPlayerID == GetLocalPlayerID(game) then
                 foundIncoming = true;
                 local offerID = offer.id;
                 local offerRow = UI.CreateHorizontalLayoutGroup(area);
@@ -4674,11 +4699,11 @@ function ShowResourcesMenu(parent, game)
         UI.CreateLabel(area).SetText("ACTIVE CONTRACTS");
         local foundActive = false;
         for tradeIndex, trade in ipairs(resources.activeTrades or {}) do
-            if trade.fromPlayerID == game.Us.ID or trade.toPlayerID == game.Us.ID then
+            if trade.fromPlayerID == GetLocalPlayerID(game) or trade.toPlayerID == GetLocalPlayerID(game) then
                 foundActive = true;
                 local capturedIndex = tradeIndex;
-                local direction = trade.fromPlayerID == game.Us.ID and "EXPORT" or "IMPORT";
-                local otherID = trade.fromPlayerID == game.Us.ID and trade.toPlayerID or trade.fromPlayerID;
+                local direction = trade.fromPlayerID == GetLocalPlayerID(game) and "EXPORT" or "IMPORT";
+                local otherID = trade.fromPlayerID == GetLocalPlayerID(game) and trade.toPlayerID or trade.fromPlayerID;
                 local activeRow = UI.CreateHorizontalLayoutGroup(area);
                 UI.CreateLabel(activeRow).SetText(
                     direction .. " " .. tostring(trade.amount) .. " " .. trade.resource ..
@@ -4791,8 +4816,8 @@ function BuildMainTabs(
         QueueTab(
             "markets",
             "Markets",
-            "#DAA520",
-            "#000000",
+            "#2F6F8F",
+            "#FFFFFF",
             function()
                 ShowMarketsMenu(contentHost, game);
             end
@@ -5115,10 +5140,10 @@ function CountOurActiveAgreements(
         ) do
 
         if agreement.player1
-            == game.Us.ID
+            == GetLocalPlayerID(game)
 
             or agreement.player2
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
             count =
                 count + 1;
@@ -5133,6 +5158,10 @@ function GetPlayerName(
     game,
     playerID
 )
+
+    if game == nil or game.Game == nil or playerID == nil then
+        return "No Active Player";
+    end
 
     local player =
         game.Game.Players[
@@ -5154,6 +5183,10 @@ function GetPlayerIncome(
     game,
     playerID
 )
+
+    if game == nil or game.Game == nil or playerID == nil then
+        return 0;
+    end
 
     local player =
         game.Game.Players[
@@ -5183,7 +5216,7 @@ function GetPlayerGold(
     playerID
 )
 
-    if game.LatestStanding == nil then
+    if game == nil or playerID == nil or game.LatestStanding == nil then
         return 0;
     end
 
@@ -5252,7 +5285,7 @@ function GetOurProjectInvestment(
         ) do
 
         if investment.playerID
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
             amount =
                 investment.amount
@@ -5385,14 +5418,14 @@ function ShowOverview(
 
 
         if proposal.toPlayerID
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
             incomingCount =
                 incomingCount + 1;
 
 
         elseif proposal.fromPlayerID
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
             outgoingCount =
                 outgoingCount + 1;
@@ -5411,14 +5444,14 @@ function ShowOverview(
 
 
         if agreement.player1
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
             otherID =
                 agreement.player2;
 
 
         elseif agreement.player2
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
             otherID =
                 agreement.player1;
@@ -5868,6 +5901,11 @@ function ShowFindPartners(
             "FIND TRADE PARTNERS"
         );
 
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "Find Partners is unavailable in viewer/reviewer mode because no active player is associated with this view.");
+        return;
+    end
+
 
     UI.CreateLabel(area)
         .SetText(
@@ -5882,7 +5920,7 @@ function ShowFindPartners(
 
 
     local ourID =
-        game.Us.ID;
+        GetLocalPlayerID(game);
 
 
     local ourAgreementCount =
@@ -6242,13 +6280,18 @@ function ShowMyAgreements(
 
 
     local ourID =
-        game.Us.ID;
+        GetLocalPlayerID(game);
 
 
     UI.CreateLabel(area)
         .SetText(
             "MY TRADE AGREEMENTS"
         );
+
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "My Agreements is unavailable in viewer/reviewer mode because no active player is associated with this view.");
+        return;
+    end
 
 
     UI.CreateLabel(area)
@@ -6719,7 +6762,7 @@ function ShowStockMarket(
             economy.nations
             or {}
         )[
-            game.Us.ID
+            GetLocalPlayerID(game)
         ]
         or {};
 
@@ -7077,6 +7120,11 @@ function ShowCompanyDetails(
             parent
         );
 
+    local viewerMode = IsViewerMode(game);
+    if viewerMode then
+        ShowViewerModeNotice(area, "Viewer/reviewer mode: company information is visible, but personal buy/sell and owner controls require an active player.");
+    end
+
     local data =
         Mod.PublicGameData
         or {};
@@ -7288,7 +7336,7 @@ local yourNation =
         economy.nations
         or {}
     )[
-        game.Us.ID
+        GetLocalPlayerID(game)
     ]
     or {};
 
@@ -7304,7 +7352,7 @@ local yourShares =
 local availableGold =
     GetPlayerGold(
         game,
-        game.Us.ID
+        GetLocalPlayerID(game)
     );
 
 UI.CreateLabel(area)
@@ -7422,7 +7470,7 @@ local buyButton =
             "BUY SHARES"
         )
         .SetInteractable(
-            (company.sharesAvailable or 0) > 0
+            (company.sharesAvailable or 0) > 0 and not viewerMode
         )
         .SetOnClick(function()
 
@@ -7471,7 +7519,7 @@ UpdateBuyPreview();
 local protectedFounderShares =
     0;
 
-if company.founderPlayerID == game.Us.ID then
+if company.founderPlayerID == GetLocalPlayerID(game) then
 
     protectedFounderShares =
         company.founderShares
@@ -7580,7 +7628,7 @@ UI.CreateButton(area)
         "SELL SHARES"
     )
     .SetInteractable(
-        sellableShares > 0
+        sellableShares > 0 and not viewerMode
     )
     .SetOnClick(function()
 
@@ -7754,8 +7802,8 @@ end
 -- FLAGSHIP OWNER CONTROLS
 -- ============================================
 
-if company.ownerPlayerID == game.Us.ID
-    or company.founderPlayerID == game.Us.ID
+if company.ownerPlayerID == GetLocalPlayerID(game)
+    or company.founderPlayerID == GetLocalPlayerID(game)
 then
 
     UI.CreateLabel(area)
@@ -8240,6 +8288,15 @@ end
     local economy =
         data.globalEconomy
         or {};
+
+    if IsViewerMode(game) then
+        UI.CreateLabel(area).SetText("STOCK PORTFOLIO");
+        ShowViewerModeNotice(area, "Portfolio unavailable in viewer/reviewer mode because no active player is associated with this view.");
+        UI.CreateButton(area).SetText("BACK TO MARKET").SetOnClick(function()
+            ShowStockMarket(parent, game);
+        end);
+        return;
+    end
     
     if economy.nations == nil
     or economy.market == nil
@@ -8259,7 +8316,7 @@ end
             economy.nations
             or {}
         )[
-            game.Us.ID
+            GetLocalPlayerID(game)
         ]
         or {};
 
@@ -9124,6 +9181,11 @@ function ShowMarketETF(
             parent
         );
 
+    local viewerMode = IsViewerMode(game);
+    if viewerMode then
+        ShowViewerModeNotice(area, "Viewer/reviewer mode: ETF information is visible, but personal ETF and War Bond transactions require an active player.");
+    end
+
     local data =
         Mod.PublicGameData
         or {};
@@ -9144,7 +9206,7 @@ function ShowMarketETF(
         (
             economy.nations
             and economy.nations[
-                game.Us.ID
+                GetLocalPlayerID(game)
             ]
         )
         or {};
@@ -9387,7 +9449,7 @@ UI.CreateLabel(area)
             local bondRow = UI.CreateHorizontalLayoutGroup(area);
             for _, amount in ipairs({100,250,500,1000}) do
                 local capturedAmount = amount;
-                UI.CreateButton(bondRow).SetText(tostring(capturedAmount)).SetOnClick(function()
+                UI.CreateButton(bondRow).SetText(tostring(capturedAmount)).SetInteractable(not viewerMode).SetOnClick(function()
                     game.SendGameCustomMessage("Buying War Bond...", {type="buyWarBond", issuerPlayerID=capturedIssuerID, amount=capturedAmount}, function(result)
                         if result and result.message then UI.Alert(result.message); end
                         ShowMarketETF(parent, game);
@@ -9401,7 +9463,7 @@ UI.CreateLabel(area)
     local ourWarBondCount = 0;
     local ourWarBondPrincipal = 0;
     for _, holding in ipairs(((economy.warBonds or {}).holdings or {})) do
-        if holding.buyerPlayerID == game.Us.ID and holding.status == "active" then
+        if holding.buyerPlayerID == GetLocalPlayerID(game) and holding.status == "active" then
             ourWarBondCount = ourWarBondCount + 1;
             ourWarBondPrincipal = ourWarBondPrincipal + (holding.principal or 0);
         end
@@ -9597,6 +9659,7 @@ UI.CreateButton(area)
 
 UI.CreateButton(area)
     .SetText("BUY ETF")
+    .SetInteractable(not viewerMode)
     .SetOnClick(function()
 
         if buyShares <= 0 then
@@ -9713,6 +9776,7 @@ UI.CreateButton(area)
 
 UI.CreateButton(area)
     .SetText("SELL ETF")
+    .SetInteractable(not viewerMode)
     .SetOnClick(function()
 
         if sellShares <= 0 then
@@ -10104,6 +10168,11 @@ function ShowCreateInvestmentProject(
             parent
         );
 
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "Creating an investment project requires an active player and is unavailable in viewer/reviewer mode.");
+        return;
+    end
+
 
     local projectType =
         FindInvestmentType(
@@ -10152,7 +10221,7 @@ function ShowCreateInvestmentProject(
 local availableGold =
     GetPlayerGold(
         game,
-        game.Us.ID
+        GetLocalPlayerID(game)
     );
 
 local goldLabel =
@@ -10498,7 +10567,7 @@ goldLabel.SetText(
             local currentGold =
     GetPlayerGold(
         game,
-        game.Us.ID
+        GetLocalPlayerID(game)
     );
 
 if creatorContribution > currentGold then
@@ -10588,6 +10657,11 @@ function ShowOpenInvestmentProjects(
         CreateContentArea(
             parent
         );
+
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "Investment participation requires an active player and is unavailable in viewer/reviewer mode.");
+        return;
+    end
 
 
     local data =
@@ -10717,7 +10791,7 @@ function ShowOpenInvestmentProjects(
 
 
             if project.creatorID
-                ~= game.Us.ID then
+                ~= GetLocalPlayerID(game) then
 
 
                 local alreadyInvested =
@@ -10783,7 +10857,7 @@ function ShowOpenInvestmentProjects(
                     local availableGold =
     GetPlayerGold(
         game,
-        game.Us.ID
+        GetLocalPlayerID(game)
     );
 
 local goldLabel =
@@ -10881,7 +10955,7 @@ end
 local currentGold =
     GetPlayerGold(
         game,
-        game.Us.ID
+        GetLocalPlayerID(game)
     );
 
 if amount > currentGold then
@@ -10977,6 +11051,11 @@ function ShowMyInvestments(
             parent
         );
 
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "My Investments is unavailable in viewer/reviewer mode because no active player is associated with this view.");
+        return;
+    end
+
 
     local data =
         Mod.PublicGameData or {};
@@ -10998,7 +11077,7 @@ for _, action
     in pairs(pendingActions) do
 
     if action.type == "invest"
-        and action.playerID == game.Us.ID then
+        and action.playerID == GetLocalPlayerID(game) then
 
         pendingFound =
             true;
@@ -11108,7 +11187,7 @@ end
 
 
         if project.creatorID
-            ~= game.Us.ID then
+            ~= GetLocalPlayerID(game) then
 
 
             local amount =
@@ -11202,6 +11281,11 @@ function ShowMyInvestmentProjects(
             parent
         );
 
+    if IsViewerMode(game) then
+        ShowViewerModeNotice(area, "My Investment Projects is unavailable in viewer/reviewer mode because no active player is associated with this view.");
+        return;
+    end
+
 
     local data =
         Mod.PublicGameData or {};
@@ -11225,7 +11309,7 @@ function ShowMyInvestmentProjects(
 
 
         if project.creatorID
-            == game.Us.ID then
+            == GetLocalPlayerID(game) then
 
 
             found =
@@ -12418,7 +12502,7 @@ function ShowHowItWorks(parent)
         "INVESTMENTS",
         "Project creators choose a funding goal and contribute at least 20%. Outside investors may contribute up to 25% of the goal. Fully funded projects enter development and later succeed or fail.\n\n" ..
         "Successful projects return principal plus profit. Failed projects return only the listed recovery percentage. Unfunded projects expire and refund committed principal.\n\n" ..
-        "Completed, failed, and expired projects remain in the permanent archive so players can review the creator, investors, payouts, result, and resolution roll."
+        "Completed, failed, and expired projects are kept in a recent archive so players can review creator, investors, payouts, result, and resolution roll. Very old archive entries may be trimmed automatically to keep long-running multiplayer games within War.app save-size limits."
     );
 
     Section(
@@ -12533,18 +12617,12 @@ function GetOurNationState(game)
         economy.nations or {};
 
 
-    if game == nil
-        or game.Us == nil then
-
-
+    local ourID = GetLocalPlayerID(game);
+    if ourID == nil then
         return nil;
-
     end
 
-
-    return nations[
-        game.Us.ID
-    ];
+    return nations[ourID];
 end
 
 

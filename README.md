@@ -88,3 +88,9 @@ Before publishing a release build, verify the following in a fresh multiplayer g
 - 30–40 player regression testing and 100+ player Mega Game performance testing.
 
 Gameplay features should be considered confirmed only after they have been tested in War.app.
+
+
+## Release safeguards
+
+- **Reviewer / spectator safety:** player-specific menus now handle cases where War.app opens the UI without a local `game.Us` player, showing a viewer-mode message instead of crashing.
+- **Bounded history:** long-running games automatically trim older reporting/history records while preserving live gameplay state, reducing the chance of exceeding War.app's `PublicGameData` size limit.
