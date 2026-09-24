@@ -20,6 +20,24 @@ local function ShowViewerModeNotice(area, text)
     );
 end
 
+-- Spectators/reviewers can browse the mod UI, but War.app does not allow
+-- them to send game custom messages. Route every player action through this
+-- guard so a visible action can never crash spectator mode.
+local function SafeSendGameCustomMessage(game, message, payload, callback)
+    if IsViewerMode(game) then
+        UI.Alert("Viewer mode: game actions are unavailable while spectating.");
+        return;
+    end
+    game.SendGameCustomMessage(message, payload, callback);
+end
+
+-- War.app can collapse text fields to only a few pixels in some layouts.
+-- Give every mod text input a sensible preferred width while still allowing
+-- the layout engine to size it for smaller screens.
+local function CreateWideTextInput(parent, width)
+    return UI.CreateTextInputField(parent).SetPreferredWidth(width or 120);
+end
+
 InvestmentProjectTypes = {
     {
         id = "port",
@@ -302,7 +320,7 @@ function ShowWarDeclarationReasonMenu(parent, game, targetPlayerID)
     for _, reason in ipairs(reasons) do
         local capturedReason = reason;
         UI.CreateButton(area).SetText(capturedReason).SetOnClick(function()
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Declaring war...",
                 {type="declareWar", targetPlayerID=targetPlayerID, reason=capturedReason},
                 function(result)
@@ -418,6 +436,13 @@ local playerFaction =
 
     local ourID =
         GetLocalPlayerID(game);
+
+    if ourID == nil then
+        ShowViewerModeNotice(
+            area,
+            "Viewer mode: diplomacy information is available, but create/join/propose actions are disabled while spectating."
+        );
+    end
 
 local ourFactionID =
     playerFaction[
@@ -948,7 +973,7 @@ end
         );
 
     playerSearchInput =
-        UI.CreateTextInputField(
+        CreateWideTextInput(
             area
         )
             .SetPlaceholderText(
@@ -1222,7 +1247,7 @@ end
                 UI.CreateButton(area)
                     .SetText("JOIN " .. WarParticipantNames(sideAIDs))
                     .SetOnClick(function()
-                        game.SendGameCustomMessage(
+                        SafeSendGameCustomMessage(game, 
                             "Joining war...",
                             {type="joinWar", conflictID=joinConflictID, side="A"},
                             function(result)
@@ -1235,7 +1260,7 @@ end
                 UI.CreateButton(area)
                     .SetText("JOIN " .. WarParticipantNames(sideBIDs))
                     .SetOnClick(function()
-                        game.SendGameCustomMessage(
+                        SafeSendGameCustomMessage(game, 
                             "Joining war...",
                             {type="joinWar", conflictID=joinConflictID, side="B"},
                             function(result)
@@ -1405,7 +1430,7 @@ end
                 "CHOOSE FULL MOBILIZATION"
             )
             .SetOnClick(function()
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Resolving war event...",
                     {
                         type = "resolveWarEvent",
@@ -1433,7 +1458,7 @@ end
                 "CHOOSE RATION SUPPLIES"
             )
             .SetOnClick(function()
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Resolving war event...",
                     {
                         type = "resolveWarEvent",
@@ -1459,7 +1484,7 @@ end
                 "CHOOSE PROTECT ECONOMY"
             )
             .SetOnClick(function()
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Resolving war event...",
                     {
                         type = "resolveWarEvent",
@@ -1727,7 +1752,7 @@ if activeNAP == nil
                         .SetOnClick(function()
 
 
-                            game.SendGameCustomMessage(
+                            SafeSendGameCustomMessage(game, 
                                 "Sending Non-Aggression Pact proposal...",
                                 {
 
@@ -1759,7 +1784,7 @@ UI.CreateButton(row)
     )
     .SetOnClick(function()
 
-        game.SendGameCustomMessage(
+        SafeSendGameCustomMessage(game, 
             "Sending Alliance proposal...",
             {
 
@@ -1799,7 +1824,7 @@ if isAllied then
         )
         .SetOnClick(function()
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Ending Alliance...",
                 {
 
@@ -1848,7 +1873,7 @@ if ourFaction ~= nil
         )
         .SetOnClick(function()
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Sending Faction invitation...",
                 {
 
@@ -1898,7 +1923,7 @@ end
                     .SetOnClick(function()
 
 
-                        game.SendGameCustomMessage(
+                        SafeSendGameCustomMessage(game, 
                             "Sending peace offer...",
                             {
 
@@ -2016,7 +2041,7 @@ local fromName =
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Accepting peace offer...",
                         {
 
@@ -2049,7 +2074,7 @@ local fromName =
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Rejecting peace offer...",
                         {
 
@@ -2165,7 +2190,7 @@ UI.CreateLabel(group)
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Accepting Non-Aggression Pact...",
                         {
 
@@ -2198,7 +2223,7 @@ UI.CreateLabel(group)
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Rejecting Non-Aggression Pact...",
                         {
 
@@ -2302,7 +2327,7 @@ for _, offer
             .SetOnClick(function()
 
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Accepting Alliance proposal...",
                     {
 
@@ -2343,7 +2368,7 @@ for _, offer
             .SetOnClick(function()
 
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Rejecting Alliance proposal...",
                     {
 
@@ -2409,7 +2434,7 @@ if ourFaction == nil then
 
 
     local factionNameInput =
-        UI.CreateTextInputField(
+        CreateWideTextInput(
             area
         )
             .SetPlaceholderText(
@@ -2421,13 +2446,14 @@ if ourFaction == nil then
         .SetText(
             "CREATE FACTION"
         )
+        .SetInteractable(not IsViewerMode(game))
         .SetOnClick(function()
 
             local factionName =
                 factionNameInput.GetText();
 
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Creating Faction...",
                 {
 
@@ -2549,7 +2575,7 @@ else
                     )
                     .SetOnClick(function()
 
-                        game.SendGameCustomMessage(
+                        SafeSendGameCustomMessage(game, 
                             "Removing Faction member...",
                             {
 
@@ -2599,7 +2625,7 @@ else
             )
             .SetOnClick(function()
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Leaving Faction...",
                     {
 
@@ -2645,7 +2671,7 @@ else
         )
         .SetOnClick(function()
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Disbanding Faction...",
                 {
 
@@ -2758,7 +2784,7 @@ for _, invite in ipairs(
             )
             .SetOnClick(function()
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Accepting Faction invitation...",
                     {
 
@@ -2799,7 +2825,7 @@ for _, invite in ipairs(
             )
             .SetOnClick(function()
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Rejecting Faction invitation...",
                     {
 
@@ -3675,7 +3701,7 @@ function ShowUnitedNationsMenu(parent, game)
                 vote
             )
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Submitting UN vote...",
                     {
                         type =
@@ -3874,7 +3900,7 @@ function ShowUnitedNationsMenu(parent, game)
         );
 
     local targetSearch =
-        UI.CreateTextInputField(
+        CreateWideTextInput(
             area
         );
 
@@ -4033,7 +4059,7 @@ function ShowUnitedNationsMenu(parent, game)
                     return;
                 end
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Submitting UN resolution...",
                     {
                         type =
@@ -4279,7 +4305,7 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.howItWorks =
                 helpBox.GetIsChecked();
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Updating war event alert preference...",
                 {
                     type = "setWarEventAlerts",
@@ -4316,7 +4342,7 @@ function ShowCustomizeTabs(
             PlayerTabVisibility.globalEconomy = true;
             PlayerTabVisibility.howItWorks = true;
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Restoring war event alerts...",
                 {
                     type = "setWarEventAlerts",
@@ -4537,7 +4563,7 @@ function ShowResourcesMenu(parent, game)
                 end
                 local territoryID = terrDetails.ID;
                 territoryStatus.SetText("Scheduling upgrade...");
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Scheduling resource facility...",
                     {type="buildResourceFacility", territoryID=territoryID, resource=selectedResource},
                     function(result)
@@ -4565,7 +4591,7 @@ function ShowResourcesMenu(parent, game)
             recruiterStatus.SetText("Select one of your territories.");
             UI.InterceptNextTerritoryClick(function(terrDetails)
                 if terrDetails == nil then recruiterStatus.SetText("Territory selection canceled."); return; end
-                game.SendGameCustomMessage("Building Army Recruiter...", {type="buildArmyRecruiter", territoryID=terrDetails.ID}, function(result)
+                SafeSendGameCustomMessage(game, "Building Army Recruiter...", {type="buildArmyRecruiter", territoryID=terrDetails.ID}, function(result)
                     if result and result.message then UI.Alert(result.message); end
                     ShowResourcesMenu(parent, game);
                 end);
@@ -4622,7 +4648,7 @@ function ShowResourcesMenu(parent, game)
         end);
 
         UI.CreateLabel(area).SetText("Search Trade Partner");
-        local searchInput = UI.CreateTextInputField(area);
+        local searchInput = CreateWideTextInput(area);
         local searchHost = UI.CreateVerticalLayoutGroup(area);
 
         local function RefreshResourcePartnerSearch()
@@ -4659,7 +4685,7 @@ function ShowResourcesMenu(parent, game)
 
         UI.CreateButton(area).SetText("SEND RESOURCE OFFER").SetOnClick(function()
             if targetPlayerID == nil then UI.Alert("Select a trade partner first."); return; end
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Sending resource trade offer...",
                 {type="proposeResourceTrade", targetPlayerID=targetPlayerID, resource=tradeResource, amount=tradeAmount, pricePerUnit=tradePrice},
                 function(result)
@@ -4681,13 +4707,13 @@ function ShowResourcesMenu(parent, game)
                     " @ " .. tostring(offer.pricePerUnit) .. " gold/unit"
                 );
                 UI.CreateButton(offerRow).SetText("ACCEPT").SetOnClick(function()
-                    game.SendGameCustomMessage("Accepting resource trade...", {type="acceptResourceTrade", offerID=offerID}, function(result)
+                    SafeSendGameCustomMessage(game, "Accepting resource trade...", {type="acceptResourceTrade", offerID=offerID}, function(result)
                         if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
                         ShowResourcesMenu(parent, game);
                     end);
                 end);
                 UI.CreateButton(offerRow).SetText("REJECT").SetOnClick(function()
-                    game.SendGameCustomMessage("Rejecting resource trade...", {type="rejectResourceTrade", offerID=offerID}, function(result)
+                    SafeSendGameCustomMessage(game, "Rejecting resource trade...", {type="rejectResourceTrade", offerID=offerID}, function(result)
                         if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
                         ShowResourcesMenu(parent, game);
                     end);
@@ -4711,7 +4737,7 @@ function ShowResourcesMenu(parent, game)
                     " | Last delivered: " .. tostring(trade.lastTransferred or 0)
                 );
                 UI.CreateButton(activeRow).SetText("CANCEL").SetOnClick(function()
-                    game.SendGameCustomMessage("Canceling resource contract...", {type="cancelResourceTrade", tradeIndex=capturedIndex}, function(result)
+                    SafeSendGameCustomMessage(game, "Canceling resource contract...", {type="cancelResourceTrade", tradeIndex=capturedIndex}, function(result)
                         if result ~= nil and result.message ~= nil then UI.Alert(result.message); end
                         ShowResourcesMenu(parent, game);
                     end);
@@ -4907,8 +4933,8 @@ function BuildMainTabs(
     QueueTab(
         "customize",
         "Customize Tabs",
-        "#BABABC",
-        "#000000",
+        "#455A64",
+        "#FFFFFF",
         function()
             ShowCustomizeTabs(
                 contentHost,
@@ -6198,7 +6224,7 @@ function ShowFindPartners(
                     .SetOnClick(function()
 
 
-                        game.SendGameCustomMessage(
+                        SafeSendGameCustomMessage(game, 
                             "Sending trade proposal...",
 
                             {
@@ -6380,7 +6406,7 @@ function ShowMyAgreements(
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Accepting trade proposal...",
 
                         {
@@ -6428,7 +6454,7 @@ function ShowMyAgreements(
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Rejecting trade proposal...",
 
                         {
@@ -6668,7 +6694,7 @@ function ShowMyAgreements(
                 .SetOnClick(function()
 
 
-                    game.SendGameCustomMessage(
+                    SafeSendGameCustomMessage(game, 
                         "Canceling trade agreement...",
 
                         {
@@ -6810,7 +6836,7 @@ function ShowStockMarket(
         );
 
     local searchInput =
-        UI.CreateTextInputField(
+        CreateWideTextInput(
             area
         )
             .SetPlaceholderText(
@@ -7478,7 +7504,7 @@ local buyButton =
                 return;
             end
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Buying shares...",
                 {
                     type = "buyStock",
@@ -7636,7 +7662,7 @@ UI.CreateButton(area)
             return;
         end
 
-        game.SendGameCustomMessage(
+        SafeSendGameCustomMessage(game, 
             "Selling shares...",
             {
                 type = "sellStock",
@@ -7872,7 +7898,7 @@ end
             amount
         )
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Issuing new shares...",
                 {
                     type =
@@ -9450,7 +9476,7 @@ UI.CreateLabel(area)
             for _, amount in ipairs({100,250,500,1000}) do
                 local capturedAmount = amount;
                 UI.CreateButton(bondRow).SetText(tostring(capturedAmount)).SetInteractable(not viewerMode).SetOnClick(function()
-                    game.SendGameCustomMessage("Buying War Bond...", {type="buyWarBond", issuerPlayerID=capturedIssuerID, amount=capturedAmount}, function(result)
+                    SafeSendGameCustomMessage(game, "Buying War Bond...", {type="buyWarBond", issuerPlayerID=capturedIssuerID, amount=capturedAmount}, function(result)
                         if result and result.message then UI.Alert(result.message); end
                         ShowMarketETF(parent, game);
                     end);
@@ -9666,7 +9692,7 @@ UI.CreateButton(area)
             return;
         end
 
-        game.SendGameCustomMessage(
+        SafeSendGameCustomMessage(game, 
             "Buy ETF",
             {
                 type =
@@ -9783,7 +9809,7 @@ UI.CreateButton(area)
             return;
         end
 
-        game.SendGameCustomMessage(
+        SafeSendGameCustomMessage(game, 
             "Sell ETF",
             {
                 type =
@@ -10583,7 +10609,7 @@ if creatorContribution > currentGold then
     return;
 end
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Publishing project...",
 
                 {
@@ -10971,7 +10997,7 @@ if amount > currentGold then
     return;
 end
 
-                            game.SendGameCustomMessage(
+                            SafeSendGameCustomMessage(game, 
                                 "Investing...",
 
                                 {
@@ -11133,7 +11159,7 @@ for _, action
             )
             .SetOnClick(function()
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Cancelling investment...",
 
                     {
@@ -12039,7 +12065,7 @@ function ShowAIManagerMenu(
         );
 
     local budgetInput =
-        UI.CreateTextInputField(
+        CreateWideTextInput(
             area
         );
 
@@ -12108,7 +12134,7 @@ function ShowAIManagerMenu(
                 )
             );
 
-        game.SendGameCustomMessage(
+        SafeSendGameCustomMessage(game, 
             "Updating AI Manager...",
             {
                 type =
@@ -13441,7 +13467,7 @@ UI.CreateLabel(area)
 
 
         companyNameInput =
-            UI.CreateTextInputField(
+            CreateWideTextInput(
                 area
             )
                 .SetPlaceholderText(
@@ -13702,7 +13728,7 @@ UI.CreateLabel(area)
                 end
 
 
-                game.SendGameCustomMessage(
+                SafeSendGameCustomMessage(game, 
                     "Submitting economic reform...",
 
                     {
@@ -13779,7 +13805,7 @@ UI.CreateLabel(area)
             end
 
 
-            game.SendGameCustomMessage(
+            SafeSendGameCustomMessage(game, 
                 "Saving National Setup...",
 
                 {
