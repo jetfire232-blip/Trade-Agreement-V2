@@ -1,3 +1,4 @@
+require('GA_AISetup');
 -- =========================================================
 -- GLOBAL ECONOMY & DIPLOMACY
 -- INITIAL GAME / NATION STATE
@@ -21,22 +22,7 @@ end
 
 
 local function IsAIPlayer(player)
-
-    if player == nil then
-        return false;
-    end
-
-    -- War.app exposes player information differently
-    -- depending on player type / state.
-    -- For now this field is initialized conservatively.
-    -- Smart AI handling will be finalized when we build
-    -- the AI Strategy Engine.
-
-    if player.IsAI ~= nil then
-        return player.IsAI == true;
-    end
-
-    return false;
+    return GAIsAIControlled(player);
 end
 
 

@@ -1,3 +1,4 @@
+require('GA_AISetup');
 -- =========================================================
 -- GLOBAL ECONOMY, TRADE, INVESTMENTS & DIPLOMACY
 -- SERVER ADVANCE TURN
@@ -1297,7 +1298,7 @@ function EnsureEconomyNation(
 
             isAI =
                 player ~= nil
-                and player.IsAI
+                and GAIsAIControlled(player)
                 or false,
 
 
@@ -2305,48 +2306,11 @@ nation.stockCostBasis[
 end
 
 
-function EnsureAINationalSetups(
-    game,
-    data
-)
-
-    for playerID, player
-        in pairs(
-            game.Game.Players
-        ) do
-
-
-        if player.IsAI
-            and IsPlayerAvailable(
-                game,
-                playerID
-            ) then
-
-
-            local nation =
-                EnsureEconomyNation(
-                    game,
-                    data,
-                    playerID
-                );
-
-
-            if nation.setupComplete
-                ~= true then
-
-
-                CompleteAINationalSetup(
-                    game,
-                    data,
-                    playerID
-                );
-
-            end
-
-        end
-
-    end
-
+function EnsureAINationalSetups(game,data)
+    return GARepairAINationalSetups(game,data,
+        function(id)return EnsureEconomyNation(game,data,id)end,
+        function(id)return GetCommerceIncome(game,id)end,
+        function(id)return CalculateStartingStockPrice(game,id)end);
 end
 -- =========================================================
 -- ELIMINATION STATE
@@ -6565,7 +6529,7 @@ function UpdateAITradeMemory(
 
 
             if aiPlayer ~= nil
-                and aiPlayer.IsAI
+                and GAIsAIControlled(aiPlayer)
                 and CanNationsTrade(
                     game,
                     data,
@@ -7325,7 +7289,7 @@ function AIConsiderTradeProposal(
     -- AI -> AI
     -- =====================================================
 
-    if target.IsAI then
+    if GAIsAIControlled(target) then
 
 
         if AIWouldAcceptTrade(
@@ -11495,7 +11459,7 @@ function AIConsiderPeace(
 
                 -- AI vs AI can settle immediately.
 
-                if otherPlayer.IsAI then
+                if GAIsAIControlled(otherPlayer) then
 
 
                     if AIWouldAcceptPeace(
@@ -11640,7 +11604,7 @@ function ProcessAIIncomingPeaceOffers(
 
 
         if targetPlayer ~= nil
-            and targetPlayer.IsAI then
+            and GAIsAIControlled(targetPlayer) then
 
 
             local fromPlayerID =
@@ -11960,7 +11924,7 @@ function ProcessAIIncomingNAPOffers(
 
 
         if targetPlayer ~= nil
-            and targetPlayer.IsAI then
+            and GAIsAIControlled(targetPlayer) then
 
 
             local fromPlayerID =
@@ -12128,7 +12092,7 @@ function ProcessAIIncomingAllianceOffers(
 
 
         if targetPlayer ~= nil
-            and targetPlayer.IsAI then
+            and GAIsAIControlled(targetPlayer) then
 
             local fromPlayerID =
                 offer.fromPlayerID;
@@ -12343,7 +12307,7 @@ function ProcessAIIncomingFactionInvites(
 
 
         if targetPlayer ~= nil
-            and targetPlayer.IsAI then
+            and GAIsAIControlled(targetPlayer) then
 
 
             local faction =
@@ -12590,7 +12554,7 @@ function AIConsiderNAP(
         GetDefaultNAPDuration();
 
 
-    if target.IsAI then
+    if GAIsAIControlled(target) then
 
 
         CreateDiplomacyNAP(
@@ -12950,7 +12914,7 @@ ProcessAIIncomingFactionInvites(
         ) do
 
 
-        if player.IsAI
+        if GAIsAIControlled(player)
             and IsNationEconomyReady(
                 game,
                 data,
@@ -16197,7 +16161,7 @@ local function ProcessUnitedNations(
                 ];
 
             if player ~= nil
-                and player.IsAI == true
+                and GAIsAIControlled(player) == true
                 and resolution.votes[
                     tostring(
                         voterID
@@ -16531,7 +16495,7 @@ local function ProcessWarEvents(
         local player = game.Game.Players[playerID];
         if pending ~= nil
             and player ~= nil
-            and player.IsAI ~= true
+            and GAIsAIControlled(player) ~= true
             and currentTurn > (pending.createdTurn or currentTurn)
         then
             local commerce = math.max(1, GetCommerceIncome(game, playerID));
@@ -16608,7 +16572,7 @@ local function ProcessWarEvents(
                             diplomacy.nextWarEventID = eventID + 1;
                             nation.lastWarEventTurn = currentTurn;
 
-                            if player.IsAI == true then
+                            if GAIsAIControlled(player) == true then
                                 local commerce = math.max(1, GetCommerceIncome(game, participantID));
                                 local cost = math.max(10, math.floor(commerce * 0.03 + 0.5));
                                 ApplyWarEventConsequence(
@@ -16927,7 +16891,7 @@ function Server_AdvanceTurn_Start(
         ) do
 
 
-        if player.IsAI
+        if GAIsAIControlled(player)
             and IsPlayerAvailable(
                 game,
                 playerID
@@ -17014,7 +16978,7 @@ TrimMarketNews(
         ) do
 
 
-        if player.IsAI
+        if GAIsAIControlled(player)
             and IsPlayerAvailable(
                 game,
                 playerID
@@ -17077,7 +17041,7 @@ end
             ) do
 
             if player ~= nil
-                and player.IsAI ~= true
+                and GAIsAIControlled(player) ~= true
                 and IsPlayerAvailable(
                     game,
                     playerID
@@ -17458,7 +17422,7 @@ if order.proxyType == "GameOrderDeploy" then
         ];
 
     if deployPlayer == nil
-        or deployPlayer.IsAI ~= true
+        or GAIsAIControlled(deployPlayer) ~= true
     then
         return;
     end
@@ -17592,7 +17556,7 @@ end
 
 local attackerIsAI =
     attacker ~= nil
-    and attacker.IsAI == true;
+    and GAIsAIControlled(attacker) == true;
 
     if attackerID == nil then
 

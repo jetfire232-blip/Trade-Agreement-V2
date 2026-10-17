@@ -1,3 +1,4 @@
+require('GA_AISetup');
 -- =========================================================
 -- GLOBAL ECONOMY & DIPLOMACY
 -- SERVER CUSTOM MESSAGES
@@ -1735,7 +1736,7 @@ local function EnsureNation(
 
         isAI =
             player ~= nil
-            and player.IsAI
+            and GAIsAIControlled(player)
             or false,
 
 
@@ -3247,6 +3248,16 @@ function Server_GameCustomMessage(
 
 
     -- =====================================================
+    -- Repair live AI takeovers before any target setup check, including in older saves.
+    local repaired=GARepairAINationalSetups(game,data,
+        function(id)return EnsureNation(data,game,id)end,
+        function(id)return GetCommerceIncome(game,id)end,
+        function(id)return CalculateStartingStockPrice(game,id)end);
+    if repaired>0 then CompactPublicGameDataForSave(data); Mod.PublicGameData=data; end
+    if payload.type=="repairAINationalSetups" then
+        setReturn({success=true,message=tostring(repaired).." AI nation(s) completed National Setup. Reopen the target overview to refresh diplomacy."}); return;
+    end
+
     -- MANDATORY NATIONAL SETUP SERVER LOCK
     -- =====================================================
 
@@ -10347,7 +10358,7 @@ end
         -- HUMAN -> AI
         -- =================================================
 
-        if target.IsAI then
+        if GAIsAIControlled(target) then
 
 
             if EvaluateAITrade(

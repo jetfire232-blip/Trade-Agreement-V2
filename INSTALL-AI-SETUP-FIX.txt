@@ -1,0 +1,30 @@
+GLOBAL AFFAIRS V3 — AI TAKEOVER NATIONAL SETUP FIX
+
+Based on Global-Affairs-V3-Approval-Review-Fix-2.zip, the newest Global Affairs source located for this task. This is a targeted Global Affairs patch, not United Frontier.
+
+UPLOAD ALL FIVE LUA FILES TO THE SAME MOD ROOT:
+GA_AISetup.lua (new shared helper — required)
+Server_AdvanceTurn.lua
+Server_GameCustomMessage.lua
+Server_StartGame.lua
+Client_PresentMenuUI.lua
+
+Keep existing images, settings and other source files. Do not upload the ZIP itself as a mod source file. If your deployed Global Affairs code has changes after Approval Review Fix 2, merge this fix into that source instead of replacing it with these older-baseline files.
+
+AFTER THE SAME MOD LOADS THE UPDATED CODE:
+Open Diplomacy > REFRESH AI NATIONAL SETUPS, then reopen the target player overview.
+AI repair also runs before server actions and during turn processing.
+No new game is required by this migration, but the running game must actually load the updated mod code; editing a different mod/repository cannot change that game's behavior.
+
+WHAT CHANGED:
+- Detect IsAIOrHumanTurnedIntoAI and HumanTurnedIntoAI, with IsAI fallback.
+- Server AI behavior/diplomacy checks recognize converted humans too.
+- Complete unfinished setups only for AI-controlled, non-surrendered nations that own territories.
+- Preserve valid choices, existing flagship/holdings and completed setup.
+- Create missing flagship with normal founder shares; no duplicate company or shares on repeated repair.
+- Preserve standard war restrictions; this does not bypass alliances, NAPs or peace cooldowns.
+- How It Works updated.
+
+TESTED:
+Lua parsing; real repair helper and turn wrapper; converted-human detection; partial choices; company reuse; holdings preservation; landless/surrendered/human exclusions; repeated repairs; readiness gate; human reclaim.
+Live multiplayer testing is still required after upload.

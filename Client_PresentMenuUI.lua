@@ -347,6 +347,15 @@ function ShowDiplomacyMenu(
         );
 
 
+    if not IsViewerMode(game) then
+        UI.CreateButton(area).SetText("REFRESH AI NATIONAL SETUPS").SetOnClick(function()
+            SafeSendGameCustomMessage(game,"Updating AI nations...",{type="repairAINationalSetups"},function(result)
+                if result and result.message then UI.Alert(result.message); end
+                ShowDiplomacyMenu(parent,game);
+            end);
+        end);
+    end
+
     local data =
         Mod.PublicGameData
         or {};
@@ -12501,7 +12510,7 @@ function ShowHowItWorks(parent)
 
     Section(
         "QUICK START",
-        "1. Complete National Setup: choose ideology, economic strategy, tax policy, flagship company, and company strategy.\n\n" ..
+        "1. Complete National Setup: choose ideology, economic strategy, tax policy, flagship company, and company strategy. AI-controlled nations, including humans who turn into AI, complete unfinished setup automatically. Existing choices and companies are retained. In an ongoing game, Diplomacy > REFRESH AI NATIONAL SETUPS repairs eligible AI nations immediately.\n\n" ..
         "2. Commerce is your main economic power. In Commerce games it is also the gold used to buy armies, so economic decisions affect military expansion.\n\n" ..
         "3. Open Diplomacy to see relationships, Current Wars, alliances, NAPs, and any wartime decision waiting for you.\n\n" ..
         "4. Use Trade Agreements and Investments to grow your economy.\n\n" ..
