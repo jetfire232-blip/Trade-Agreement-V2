@@ -2326,6 +2326,34 @@ function UpdateEconomyNationActivity(
             data
         );
 
+    -- A player can be eliminated without explicitly surrendering. Build the
+    -- live ownership set once so nations with no remaining territories are
+    -- removed from active economy and diplomacy state on the same turn.
+    local activeTerritoryOwners = {};
+    local standing =
+        game.ServerGame
+        and game.ServerGame.LatestTurnStanding
+        or nil;
+
+    if standing ~= nil
+        and standing.Territories ~= nil then
+
+        for _, territory in pairs(
+            standing.Territories
+        ) do
+
+            local owner =
+                territory.OwnerPlayerID;
+
+            if owner ~= nil
+                and owner ~= WL.PlayerID.Neutral then
+
+                activeTerritoryOwners[owner] =
+                    true;
+            end
+        end
+    end
+
 
     for playerID, _
         in pairs(
@@ -2344,7 +2372,12 @@ function UpdateEconomyNationActivity(
         if IsPlayerAvailable(
             game,
             playerID
-        ) then
+        )
+            and (
+                standing == nil
+                or standing.Territories == nil
+                or activeTerritoryOwners[playerID] == true
+            ) then
 
 
             nation.eliminated =
@@ -2395,6 +2428,306 @@ function UpdateEconomyNationActivity(
 
     end
 
+end
+
+
+-- =========================================================
+-- ELIMINATED-NATION DIPLOMACY CLEANUP
+-- =========================================================
+
+local function IsEliminatedDiplomacyPlayer(
+    game,
+    data,
+    playerID
+)
+    if playerID == nil then
+        return true;
+    end
+
+    local numericID =
+        tonumber(playerID)
+        or playerID;
+
+    local economy =
+        EnsureGlobalEconomyData(data);
+
+    local nation =
+        economy.nations
+        and economy.nations[numericID]
+        or nil;
+
+    return
+        not IsPlayerAvailable(game, numericID)
+        or (
+            nation ~= nil
+            and nation.eliminated == true
+        );
+end
+
+
+local function DiplomacyEntryHasEliminatedPlayer(
+    game,
+    data,
+    entry
+)
+    if entry == nil then
+        return true;
+    end
+
+    local player1 =
+        entry.player1
+        or entry.fromPlayerID;
+
+    local player2 =
+        entry.player2
+        or entry.toPlayerID;
+
+    return
+        IsEliminatedDiplomacyPlayer(
+            game,
+            data,
+            player1
+        )
+        or IsEliminatedDiplomacyPlayer(
+            game,
+            data,
+            player2
+        );
+end
+
+
+function CleanupEliminatedDiplomacy(
+    game,
+    data
+)
+    local diplomacy =
+        GetDiplomacyData(data);
+
+    local currentTurn =
+        GetCurrentDiplomacyTurn(data);
+
+    -- End active wars instead of deleting the relationship. Keeping an
+    -- explicit peace record prevents PlayersStartAtWar from recreating the
+    -- eliminated war if another system asks for this relationship later.
+    for key, relationship in pairs(
+        diplomacy.relationships
+        or {}
+    ) do
+        local player1 =
+            relationship.player1;
+
+        local player2 =
+            relationship.player2;
+
+        if DiplomacyEntryHasEliminatedPlayer(
+            game,
+            data,
+            relationship
+        ) then
+            local wasAtWar =
+                relationship.status == "war";
+
+            relationship.status = "peace";
+            relationship.sinceTurn = currentTurn;
+            relationship.lastChangedTurn = currentTurn;
+            relationship.pendingWarDeclaration = false;
+            relationship.pendingWarFrom = nil;
+            relationship.pendingWarTo = nil;
+            relationship.warActivatesTurn = nil;
+            relationship.peaceCooldownUntil = 0;
+            relationship.endedReason = "elimination";
+
+            local stats =
+                (diplomacy.warStats or {})[key];
+
+            if stats ~= nil then
+                stats.active = false;
+                stats.endTurn = currentTurn;
+                stats.endedReason = "elimination";
+            end
+
+            if wasAtWar
+                and player1 ~= nil
+                and player2 ~= nil then
+
+                local name1 =
+                    GetEconomicPlayerName(
+                        game,
+                        player1
+                    );
+
+                local name2 =
+                    GetEconomicPlayerName(
+                        game,
+                        player2
+                    );
+
+                AddDiplomacyHistory(
+                    data,
+                    "war_ended_elimination",
+                    player1,
+                    player2,
+                    "The war between " ..
+                        name1 ..
+                        " and " ..
+                        name2 ..
+                        " ended because a nation was eliminated.",
+                    {
+                        endedTurn = currentTurn,
+                        reason = "elimination"
+                    }
+                );
+            end
+        end
+    end
+
+    for key, declaration in pairs(
+        diplomacy.pendingWarDeclarations
+        or {}
+    ) do
+        if DiplomacyEntryHasEliminatedPlayer(
+            game,
+            data,
+            declaration
+        ) then
+            diplomacy.pendingWarDeclarations[key] = nil;
+        end
+    end
+
+    local offerLists = {
+        diplomacy.pendingPeaceOffers,
+        diplomacy.pendingNAPOffers,
+        diplomacy.pendingAllianceOffers,
+        diplomacy.pendingFactionInvites
+    };
+
+    for _, offers in ipairs(offerLists) do
+        if type(offers) == "table" then
+            for i = #offers, 1, -1 do
+                if DiplomacyEntryHasEliminatedPlayer(
+                    game,
+                    data,
+                    offers[i]
+                ) then
+                    table.remove(offers, i);
+                end
+            end
+        end
+    end
+
+    for key, alliance in pairs(
+        diplomacy.alliances
+        or {}
+    ) do
+        if DiplomacyEntryHasEliminatedPlayer(
+            game,
+            data,
+            alliance
+        ) then
+            diplomacy.alliances[key] = nil;
+        end
+    end
+
+    for key, pact in pairs(
+        diplomacy.nonAggressionPacts
+        or {}
+    ) do
+        if DiplomacyEntryHasEliminatedPlayer(
+            game,
+            data,
+            pact
+        ) then
+            diplomacy.nonAggressionPacts[key] = nil;
+        end
+    end
+
+    -- Remove eliminated players from faction membership and clear their
+    -- player-to-faction lookup. Historical faction records stay intact.
+    for playerID, nation in pairs(
+        (data.globalEconomy or {}).nations
+        or {}
+    ) do
+        if nation.eliminated == true then
+            if diplomacy.playerFaction ~= nil then
+                diplomacy.playerFaction[playerID] = nil;
+                diplomacy.playerFaction[tostring(playerID)] = nil;
+            end
+
+            for _, faction in pairs(
+                diplomacy.factions
+                or {}
+            ) do
+                if faction.members ~= nil then
+                    faction.members[playerID] = nil;
+                    faction.members[tostring(playerID)] = nil;
+                end
+            end
+
+            nation.pendingWarEvent = nil;
+            nation.pendingWarEventConsequence = nil;
+        end
+    end
+
+    -- A coalition conflict can contain more than one pair. It remains active
+    -- only while at least one surviving cross-side war is still active.
+    for _, conflict in pairs(
+        diplomacy.warConflicts
+        or {}
+    ) do
+        local stillActive = false;
+
+        for sideAID, sideAActive in pairs(
+            conflict.sideA
+            or {}
+        ) do
+            if sideAActive == true
+                and not IsEliminatedDiplomacyPlayer(
+                    game,
+                    data,
+                    sideAID
+                ) then
+
+                for sideBID, sideBActive in pairs(
+                    conflict.sideB
+                    or {}
+                ) do
+                    if sideBActive == true
+                        and not IsEliminatedDiplomacyPlayer(
+                            game,
+                            data,
+                            sideBID
+                        ) then
+
+                        local relationship =
+                            diplomacy.relationships[
+                                EconomyPairKey(
+                                    sideAID,
+                                    sideBID
+                                )
+                            ];
+
+                        if relationship ~= nil
+                            and relationship.status == "war" then
+                            stillActive = true;
+                            break;
+                        end
+                    end
+                end
+            end
+
+            if stillActive then
+                break;
+            end
+        end
+
+        conflict.active = stillActive;
+
+        if not stillActive then
+            conflict.endTurn =
+                conflict.endTurn
+                or currentTurn;
+        end
+    end
 end
 
 
@@ -3822,6 +4155,11 @@ function ProcessGlobalEconomyFoundation(
 
 
     UpdateEconomyNationActivity(
+        game,
+        data
+    );
+
+    CleanupEliminatedDiplomacy(
         game,
         data
     );
@@ -17398,11 +17736,108 @@ function Server_AdvanceTurn_Order(
     addNewOrder
 )
 
-    -- Only inspect Attack / Transfer orders.
-    -- Other orders such as deployments, cards,
-    -- purchases, and mod events are untouched.
+    -- Inspect Gift Cards, AI deployments, and Attack / Transfer orders.
+    -- Purchases and unrelated card or mod orders are untouched.
 
 if order == nil then
+    return;
+end
+
+
+-- =====================================================
+-- GIFT CARD DIPLOMACY ENFORCEMENT
+-- =====================================================
+-- A nation at war cannot move a territory to a third party that is outside
+-- one of its active wars. This closes the loophole where territory could be
+-- sheltered from an opponent by gifting it to a neutral player.
+
+if order.proxyType == "GameOrderPlayCardGift" then
+    local fromPlayerID =
+        order.PlayerID;
+
+    local toPlayerID =
+        order.GiftTo;
+
+    if fromPlayerID == nil
+        or toPlayerID == nil then
+        return;
+    end
+
+    local data =
+        ADVANCE_TURN_ORDER_DATA_CACHE
+        or GetEconomicData();
+
+    if data == nil then
+        return;
+    end
+
+    local diplomacy =
+        GetDiplomacyData(data);
+
+    local missingOpponentID = nil;
+
+    for _, relationship in pairs(
+        diplomacy.relationships
+        or {}
+    ) do
+        if relationship ~= nil
+            and relationship.status == "war" then
+
+            local opponentID = nil;
+
+            if tostring(relationship.player1) == tostring(fromPlayerID) then
+                opponentID = relationship.player2;
+            elseif tostring(relationship.player2) == tostring(fromPlayerID) then
+                opponentID = relationship.player1;
+            end
+
+            if opponentID ~= nil
+                and tostring(toPlayerID) ~= tostring(opponentID)
+                and not IsDiplomacyWar(
+                    data,
+                    toPlayerID,
+                    opponentID
+                ) then
+
+                missingOpponentID = opponentID;
+                break;
+            end
+        end
+    end
+
+    if missingOpponentID ~= nil then
+        local recipientName =
+            GetEconomicPlayerName(
+                game,
+                toPlayerID
+            );
+
+        local opponentName =
+            GetEconomicPlayerName(
+                game,
+                missingOpponentID
+            );
+
+        addNewOrder(
+            WL.GameOrderEvent.Create(
+                fromPlayerID,
+                "Gift Card blocked: " ..
+                    recipientName ..
+                    " is not at war with " ..
+                    opponentName ..
+                    ". Territories cannot be gifted outside an active war.",
+                {},
+                {},
+                nil,
+                nil
+            )
+        );
+
+        skipThisOrder(
+            WL.ModOrderControl.Skip
+        );
+    end
+
     return;
 end
 
@@ -17884,6 +18319,20 @@ function Server_AdvanceTurn_End(
     local data =
         ADVANCE_TURN_ORDER_DATA_CACHE
         or GetEconomicData();
+
+
+    -- Capture eliminations caused by this turn's attacks before delayed wars
+    -- or diplomacy cleanup runs.
+    UpdateEconomyNationActivity(
+        game,
+        data
+    );
+
+
+    CleanupEliminatedDiplomacy(
+        game,
+        data
+    );
 
 
     ProcessPendingWarDeclarations(

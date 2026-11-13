@@ -1,0 +1,16 @@
+GLOBAL AFFAIRS V3 — GIFT CARD AND ELIMINATION DIPLOMACY FIX
+
+Upload every file in this folder as one complete mod update.
+
+Changes:
+1. Gift Cards are blocked when the giver is at war and the recipient is not participating in the same active war(s).
+2. The blocked order produces an in-game explanation naming the recipient and missing war opponent.
+3. Players and AI with no territories, or who surrendered, are marked eliminated.
+4. Wars involving an eliminated nation end automatically and disappear from Current Wars.
+5. Pending war declarations, peace/NAP/alliance offers, active alliances/NAPs, war events, and faction membership involving the eliminated nation are cleared.
+6. Diplomacy history keeps a record that the war ended because of elimination.
+
+Live test after upload:
+- A at war with B; A gifts to C while C is at peace with B: blocked.
+- Put C at war with B; repeat A to C gift: allowed.
+- Eliminate or surrender B; advance the turn: A vs B no longer appears in Current Wars.
